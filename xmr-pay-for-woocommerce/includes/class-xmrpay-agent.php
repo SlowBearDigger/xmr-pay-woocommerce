@@ -60,6 +60,18 @@ class XmrPay_Agent {
 		return $this->decode( $res, array( 200 ) );
 	}
 
+	/**
+	 * The signed receipt for a paid order — the envelope to hand the buyer.
+	 * @return array|WP_Error the signed receipt envelope { typ, receipt, pubkey, fingerprint, sig }
+	 */
+	public function get_receipt( $id ) {
+		$res = wp_remote_get( $this->url . '/receipt/' . rawurlencode( (string) $id ), array(
+			'timeout' => 20,
+			'headers' => $this->headers(),
+		) );
+		return $this->decode( $res, array( 200 ) );
+	}
+
 	/** Liveness — used by the settings "Test connection" button. */
 	public function healthz() {
 		$res = wp_remote_get( $this->url . '/healthz', array( 'timeout' => 10, 'headers' => $this->headers() ) );

@@ -4,7 +4,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.2
+Stable tag: 0.1.3
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -61,6 +61,11 @@ https://demo.xmrpay.shop — a public stagenet demo. Grab test XMR from a stagen
 
 == Changelog ==
 
+= 0.1.3 (beta) =
+* Cryptographic receipts: once an order is paid, the order-received page shows a "Download receipt" (a merchant-signed receipt) plus a one-click link to a bundled, offline, dependency-free verifier — anyone can verify it forever, no third party. The signed receipt is also stored on the order.
+* New "Redirect after payment (URL)" setting: send the buyer to a custom page (a thank-you, a digital download, etc.) the moment the payment confirms. Supports {order_id} / {order_key} placeholders.
+* test_amount override is now honoured only when the agent is on a confirmed test network (stagenet/testnet) — it can never silently fix the price on a live store.
+
 = 0.1.2 (beta) =
 * Add a "Payment box theme" setting (light/dark) so the QR/payment box matches your store theme instead of always rendering light.
 
@@ -71,6 +76,9 @@ https://demo.xmrpay.shop — a public stagenet demo. Grab test XMR from a stagen
 * First public beta. Gateway (classic + Blocks), HPOS support, XMR-native + CoinGecko/fixed pricing, live on-chain progress + top-up, signed HMAC webhooks, exact piconero math, "Test connection", order payment meta box, debug logging.
 
 == Upgrade Notice ==
+
+= 0.1.3 =
+Adds downloadable, verifiable cryptographic receipts and an optional post-payment redirect.
 
 = 0.1.2 =
 Adds a light/dark theme option for the payment box.

@@ -7,6 +7,7 @@
 	if (!host) return;
 	var url = host.getAttribute('data-poll');
 	var already = host.getAttribute('data-paid') === '1';
+	var redirect = host.getAttribute('data-redirect') || '';
 	if (!url) return;
 
 	var L = window.xmrpayL10n || {};
@@ -99,7 +100,10 @@
 			.then(function (r) { return r.json(); })
 			.then(function (d) {
 				paint(d || {});
-				if (d && d.paid) { stopped = true; setTimeout(function () { location.reload(); }, 1800); }
+				// on the live paid transition: send the buyer to the merchant's
+				// redirect if set, otherwise reload so the page shows the confirmed
+				// state + the downloadable receipt.
+				if (d && d.paid) { stopped = true; setTimeout(function () { redirect ? (window.location.href = redirect) : location.reload(); }, 1800); }
 			})
 			.catch(function () { /* transient — keep watching */ });
 	}
