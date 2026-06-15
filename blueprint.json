@@ -1,0 +1,21 @@
+{
+  "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+  "login": true,
+  "siteOptions": {
+    "blogname": "xmr-pay Test Store",
+    "woocommerce_currency": "USD",
+    "woocommerce_default_country": "US:CA",
+    "woocommerce_calc_taxes": "no"
+  },
+  "plugins": ["woocommerce"],
+  "steps": [
+    {
+      "step": "activatePlugin",
+      "pluginPath": "xmr-pay-for-woocommerce/xmr-pay-for-woocommerce.php"
+    },
+    {
+      "step": "runPHP",
+      "code": "<?php require_once('/wordpress/wp-load.php'); update_option('woocommerce_xmrpay_settings', array('enabled'=>'yes','title'=>'Monero (XMR)','description'=>'Pay privately with Monero.','agent_url'=>'http://127.0.0.1:8788','agent_token'=>'','webhook_secret'=>'whsec_test_xmrpay','min_confirmations'=>'1','test_amount'=>'0.01')); echo 'ok';"
+    }
+  ]
+}
