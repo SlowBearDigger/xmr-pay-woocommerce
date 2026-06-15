@@ -95,7 +95,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'type'        => 'text',
 				'default'     => '',
 				'placeholder' => 'https://example.com/thank-you',
-				'description' => __( 'Optional. When the payment confirms, send the buyer here (a custom thank-you, a digital-download page, etc.) instead of staying on the order-received page. {order_id} and {order_key} are substituted. Leave empty for the default WooCommerce behaviour.', 'xmr-pay-for-woocommerce' ),
+				'description' => __( 'Optional. When the payment confirms, send the buyer here (a custom thank-you, a digital-download page, etc.) instead of staying on the order-received page. {order_id} and {order_key} are substituted — {order_key} only for a URL on this same site, so the order token is never leaked to a third-party domain. Leave empty for the default WooCommerce behaviour.', 'xmr-pay-for-woocommerce' ),
 			),
 			'agent_section' => array(
 				'title' => __( 'Your xmr-pay agent', 'xmr-pay-for-woocommerce' ),
@@ -245,6 +245,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $url === '' ) {
 			wp_send_json_error( array( 'msg' => __( 'set the agent URL first', 'xmr-pay-for-woocommerce' ) ) );
 		}
+		// the agent is designed to run locally — reject any URL whose host is not
+		// localhost so this button cannot be used to probe internal network services.
+		$parsed = wp_parse_url( $url );
+		$host   = isset( $parsed['host'] ) ? strtolower( trim( $parsed['host'], '[]' ) ) : '';
+		if ( ! in_array( $host, array( 'localhost', '127.0.0.1', '::1' ), true ) ) {
+			wp_send_json_error( array( 'msg' => __( 'Agent URL must point to localhost (127.0.0.1 or ::1).', 'xmr-pay-for-woocommerce' ) ) );
+		}
 		$headers = array();
 		if ( $token !== '' ) { $headers['Authorization'] = 'Bearer ' . $token; }
 		$res = wp_remote_get( trailingslashit( $url ) . 'healthz', array( 'timeout' => 10, 'headers' => $headers ) );
@@ -258,6 +265,10 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 		$network = sanitize_text_field( isset( $body['network'] ) ? $body['network'] : '' );
 		update_option( 'xmrpay_agent_network', $network );   // gates the test_amount override (test networks only)
+		// bind that network to the EXACT url we just probed. get_xmr_amount only
+		// honours test_amount when this still matches the saved agent_url, so a
+		// stale "stagenet" flag can never let test_amount price a mainnet store.
+		update_option( 'xmrpay_agent_tested_url', untrailingslashit( trim( (string) $url ) ) );
 		$view = ! empty( $body['viewOnly'] ) ? 'view-only' : 'NOT view-only (!)';
 		wp_send_json_success( array( 'msg' => sprintf( 'connected · %s · %s', $network !== '' ? $network : '?', $view ) ) );
 	}
@@ -303,10 +314,14 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 	 */
 	public function get_xmr_amount( $order ) {
 		$test = trim( (string) $this->get_option( 'test_amount' ) );
-		// test_amount is a TEST-ONLY override. NEVER let it silently fix the price
-		// on a live store: honor it only when the agent is on a confirmed test
-		// network (cached from "Test connection"). on mainnet/unknown → ignore it.
-		if ( $test !== '' && in_array( get_option( 'xmrpay_agent_network', '' ), array( 'stagenet', 'testnet' ), true ) ) {
+		// test_amount is a TEST-ONLY override. NEVER let it silently fix the price on
+		// a live store: honor it only when the agent is on a confirmed test network
+		// AND that test was run against the url we're using NOW (see test_amount_allowed).
+		if ( $test !== '' && XmrPay_Util::test_amount_allowed(
+			get_option( 'xmrpay_agent_network', '' ),
+			get_option( 'xmrpay_agent_tested_url', '' ),
+			$this->get_option( 'agent_url' )
+		) ) {
 			return $this->fmt_xmr( (float) $test );
 		}
 		$currency = strtoupper( $order->get_currency() );
@@ -381,7 +396,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		// free order (100%-off coupon, fully-discounted or zero-priced cart): the
 		// total already includes discounts/shipping/tax, so a 0 here means nothing
 		// to collect on-chain. complete it now, skip the Monero flow.
+		// guard: if the cart total is non-zero but the XMR amount rounded to zero,
+		// that means the rate is misconfigured — fail rather than complete for free.
 		if ( (float) $amount <= 0 ) {
+			if ( (float) $order->get_total() > 0 ) {
+				wc_add_notice( __( 'Could not compute a valid XMR amount. Check your rate settings.', 'xmr-pay-for-woocommerce' ), 'error' );
+				return array( 'result' => 'failure' );
+			}
 			$order->payment_complete();
 			$order->add_order_note( __( 'Order total is 0 — no Monero payment required.', 'xmr-pay-for-woocommerce' ) );
 			if ( WC()->cart ) { WC()->cart->empty_cart(); }
@@ -431,12 +452,15 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'key'       => $order->get_order_key(),
 		), home_url( '/' ) );
 
-		// optional merchant redirect once the payment confirms (live transition only)
+		// optional merchant redirect once the payment confirms (live transition only).
+		// {order_key} is filled only for a same-origin target — never hand the order's
+		// access token to a third-party domain via the redirect URL / Referer.
 		$redirect = trim( (string) $this->get_option( 'success_redirect' ) );
 		if ( $redirect !== '' ) {
+			$key_sub  = XmrPay_Util::same_origin( $redirect, home_url() ) ? rawurlencode( $order->get_order_key() ) : '';
 			$redirect = str_replace(
 				array( '{order_id}', '{order_key}' ),
-				array( rawurlencode( (string) $order_id ), rawurlencode( $order->get_order_key() ) ),
+				array( rawurlencode( (string) $order_id ), $key_sub ),
 				$redirect
 			);
 		}
@@ -502,7 +526,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			</p>
 			<a href="<?php echo esc_attr( $download ); ?>" download="receipt-<?php echo esc_attr( $order->get_id() ); ?>.json"
 			   style="<?php echo esc_attr( $btn ); ?>;background:#ff6600;color:#fff">&#8595; <?php esc_html_e( 'Download receipt', 'xmr-pay-for-woocommerce' ); ?></a>
-			<a href="<?php echo $verify; // esc_url'd base + URL-safe fragment ?>" target="_blank" rel="noopener"
+			<a href="<?php echo esc_attr( $verify ); ?>" target="_blank" rel="noopener"
 			   style="<?php echo esc_attr( $btn ); ?>;border:1px solid #d1d5db;color:#111">&#8599; <?php esc_html_e( 'Verify receipt', 'xmr-pay-for-woocommerce' ); ?></a>
 		</div>
 		<?php
@@ -514,7 +538,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;
 		$key      = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
 		$order    = $order_id ? wc_get_order( $order_id ) : false;
-		if ( ! $order || ! hash_equals( $order->get_order_key(), $key ) ) {
+		if ( ! $order || ! hash_equals( $order->get_order_key(), $key ) || $order->get_payment_method() !== $this->id ) {
 			wp_send_json( array( 'error' => 'not found' ), 404 );
 		}
 		if ( $order->is_paid() ) {
@@ -556,6 +580,16 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 
 		$data     = json_decode( $raw, true );
+
+		// replay defence: the agent stamps a signed event_ts (ms) inside the body.
+		// idempotency (is_paid in mark_paid) is the primary guard; this additionally
+		// drops a captured webhook replayed long after the fact (see event_fresh).
+		if ( is_array( $data ) && ! XmrPay_Util::event_fresh( isset( $data['event_ts'] ) ? $data['event_ts'] : null, time() ) ) {
+			status_header( 408 );
+			echo 'stale event';
+			exit;
+		}
+
 		$order_id = is_array( $data ) && isset( $data['order_id'] ) ? absint( $data['order_id'] ) : 0;
 		$order    = $order_id ? wc_get_order( $order_id ) : false;
 		if ( ! $order ) {
@@ -574,6 +608,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 	/** Idempotently mark an order paid, recording the full on-chain detail. */
 	private function mark_paid( $order, $data ) {
+		// a signed webhook (or the status proxy) must only ever complete an order
+		// that is actually paying via this gateway — never resolve some other
+		// payment method's order by id.
+		if ( $order->get_payment_method() !== $this->id ) {
+			return;
+		}
 		if ( $order->is_paid() ) {
 			return;
 		}

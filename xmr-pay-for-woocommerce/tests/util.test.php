@@ -62,8 +62,32 @@ ok( 'verify rejects a tampered body',   XmrPay_Util::verify_sig( $body . ' ', $g
 ok( 'verify rejects wrong secret',      XmrPay_Util::verify_sig( $body, $good, 'nope' ) === false );
 ok( 'verify rejects missing signature', XmrPay_Util::verify_sig( $body, '', $secret ) === false );
 ok( 'verify rejects null signature',    XmrPay_Util::verify_sig( $body, null, $secret ) === false );
-ok( 'empty secret = opt out (accept)',  XmrPay_Util::verify_sig( $body, 'anything', '' ) === true );
+ok( 'empty secret = reject (fail closed)', XmrPay_Util::verify_sig( $body, 'anything', '' ) === false );
+ok( 'null secret = reject (fail closed)',  XmrPay_Util::verify_sig( $body, 'anything', null ) === false );
 ok( 'verify is prefix-strict',          XmrPay_Util::verify_sig( $body, hash_hmac( 'sha256', $body, $secret ), $secret ) === false ); // no "sha256=" prefix
+
+// ---------- event_fresh: webhook replay window (event_ts in ms) ----------
+$now = 1700000000; // arbitrary "now" in seconds
+ok( 'event_fresh: current stamp accepted',          XmrPay_Util::event_fresh( $now * 1000, $now ) === true );
+ok( 'event_fresh: 1h old accepted',                 XmrPay_Util::event_fresh( ( $now - 3600 ) * 1000, $now ) === true );
+ok( 'event_fresh: 2d old rejected',                 XmrPay_Util::event_fresh( ( $now - 2 * 86400 ) * 1000, $now ) === false );
+ok( 'event_fresh: absent stamp = accept (old agents)', XmrPay_Util::event_fresh( null, $now ) === true );
+ok( 'event_fresh: garbage stamp = accept',          XmrPay_Util::event_fresh( 'xx', $now ) === true );
+
+// ---------- test_amount_allowed: never price a live store ----------
+ok( 'test_amount: stagenet + matching url → allowed', XmrPay_Util::test_amount_allowed( 'stagenet', 'http://127.0.0.1:8788', 'http://127.0.0.1:8788/' ) === true );
+ok( 'test_amount: testnet + matching url → allowed',  XmrPay_Util::test_amount_allowed( 'testnet', 'http://127.0.0.1:8788', 'http://127.0.0.1:8788' ) === true );
+ok( 'test_amount: mainnet → blocked',                 XmrPay_Util::test_amount_allowed( 'mainnet', 'http://127.0.0.1:8788', 'http://127.0.0.1:8788' ) === false );
+ok( 'test_amount: empty network → blocked',           XmrPay_Util::test_amount_allowed( '', 'http://x', 'http://x' ) === false );
+ok( 'test_amount: stale flag (url changed) → blocked', XmrPay_Util::test_amount_allowed( 'stagenet', 'http://127.0.0.1:8788', 'http://node.example:18081' ) === false );
+ok( 'test_amount: no tested url → blocked',           XmrPay_Util::test_amount_allowed( 'stagenet', '', 'http://x' ) === false );
+
+// ---------- same_origin: keep the order key on-site ----------
+ok( 'same_origin: same host → true',                 XmrPay_Util::same_origin( 'https://shop.test/thanks', 'https://shop.test' ) === true );
+ok( 'same_origin: relative path → true',             XmrPay_Util::same_origin( '/thanks?o=1', 'https://shop.test' ) === true );
+ok( 'same_origin: other host → false',               XmrPay_Util::same_origin( 'https://evil.test/x', 'https://shop.test' ) === false );
+ok( 'same_origin: protocol-relative off-site → false', XmrPay_Util::same_origin( '//evil.test/x', 'https://shop.test' ) === false );
+ok( 'same_origin: case-insensitive host → true',     XmrPay_Util::same_origin( 'https://SHOP.test/x', 'https://shop.test' ) === true );
 
 echo "\n" . ( $fail ? "FAIL" : "ALL GREEN" ) . " — $pass passed, $fail failed\n";
 exit( $fail ? 1 : 0 );

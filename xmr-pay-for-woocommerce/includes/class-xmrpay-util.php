@@ -55,17 +55,60 @@ class XmrPay_Util {
 
 	/**
 	 * Verify an HMAC-SHA256 webhook signature (the agent signs `order.paid`).
-	 * Header form: "sha256=<hex>". Constant-time compare. An empty secret means
-	 * the merchant opted out of verification (returns true).
+	 * Header form: "sha256=<hex>". Constant-time compare. Requires a non-empty
+	 * secret — returns false when none is configured so unconfigured stores
+	 * reject all webhook requests rather than accepting them blindly.
 	 */
 	public static function verify_sig( $raw, $sig, $secret ) {
 		if ( $secret === '' || $secret === null ) {
-			return true;
+			return false;
 		}
 		if ( ! is_string( $sig ) || $sig === '' ) {
 			return false;
 		}
 		$expected = 'sha256=' . hash_hmac( 'sha256', (string) $raw, (string) $secret );
 		return hash_equals( $expected, $sig );
+	}
+
+	/**
+	 * Is a signed webhook delivery fresh? `event_ts` is the agent's stamp in ms.
+	 * A non-numeric/absent stamp returns true (older agents do not send it, and
+	 * idempotency on order_id is the primary replay guard). Otherwise the delivery
+	 * must be no older than $max_age_s seconds. The window is deliberately generous
+	 * so honest deliveries are never rejected over modest clock skew.
+	 */
+	public static function event_fresh( $event_ts_ms, $now_s, $max_age_s = 86400 ) {
+		if ( ! is_numeric( $event_ts_ms ) ) {
+			return true;
+		}
+		return ( (float) $now_s - ( (float) $event_ts_ms / 1000.0 ) ) <= (float) $max_age_s;
+	}
+
+	/**
+	 * May the TEST-ONLY test_amount override the cart total? Only when the agent is
+	 * on a test network AND that network was confirmed against the SAME url in use
+	 * now — so re-pointing the agent at mainnet without re-testing disables it,
+	 * instead of riding a stale flag onto a live store.
+	 */
+	public static function test_amount_allowed( $network, $tested_url, $agent_url ) {
+		if ( ! in_array( $network, array( 'stagenet', 'testnet' ), true ) ) {
+			return false;
+		}
+		$tested = rtrim( trim( (string) $tested_url ), '/' );
+		$agent  = rtrim( trim( (string) $agent_url ), '/' );
+		return $tested !== '' && $tested === $agent;
+	}
+
+	/**
+	 * Is $url on the same host as $home (or a host-less relative path)? Used to keep
+	 * the order key out of a third-party post-payment redirect.
+	 */
+	public static function same_origin( $url, $home ) {
+		$h = parse_url( (string) $url, PHP_URL_HOST );
+		if ( empty( $h ) ) {
+			return true;
+		}
+		$hh = parse_url( (string) $home, PHP_URL_HOST );
+		return strtolower( $h ) === strtolower( (string) $hh );
 	}
 }
