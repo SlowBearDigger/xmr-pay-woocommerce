@@ -90,6 +90,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				),
 				'description' => __( 'Match the QR/payment box to your store theme so it does not look bolted-on.', 'xmr-pay-for-woocommerce' ),
 			),
+			'success_redirect' => array(
+				'title'       => __( 'Redirect after payment (URL)', 'xmr-pay-for-woocommerce' ),
+				'type'        => 'text',
+				'default'     => '',
+				'placeholder' => 'https://example.com/thank-you',
+				'description' => __( 'Optional. When the payment confirms, send the buyer here (a custom thank-you, a digital-download page, etc.) instead of staying on the order-received page. {order_id} and {order_key} are substituted. Leave empty for the default WooCommerce behaviour.', 'xmr-pay-for-woocommerce' ),
+			),
 			'agent_section' => array(
 				'title' => __( 'Your xmr-pay agent', 'xmr-pay-for-woocommerce' ),
 				'type'  => 'title',
@@ -155,7 +162,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'title'       => __( 'Test amount (XMR)', 'xmr-pay-for-woocommerce' ),
 				'type'        => 'text',
 				'placeholder' => '',
-				'description' => __( 'TEST ONLY — if set, every order charges this exact XMR amount (ignores the cart total / price feed). Use on stagenet. Leave empty in production.', 'xmr-pay-for-woocommerce' ),
+				'description' => __( 'TEST ONLY — charges this exact XMR amount, ignoring the cart total. It is honoured ONLY when your agent is on stagenet/testnet (run "Test connection" first); on mainnet it is ignored, so it can never fix the price on a live store. Leave empty in production.', 'xmr-pay-for-woocommerce' ),
 			),
 			'expiry_hours' => array(
 				'title'       => __( 'Auto-cancel after (hours)', 'xmr-pay-for-woocommerce' ),
@@ -249,8 +256,10 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $code !== 200 || ! is_array( $body ) || empty( $body['ok'] ) ) {
 			wp_send_json_error( array( 'msg' => sprintf( __( 'agent replied HTTP %d', 'xmr-pay-for-woocommerce' ), (int) $code ) ) );
 		}
+		$network = sanitize_text_field( isset( $body['network'] ) ? $body['network'] : '' );
+		update_option( 'xmrpay_agent_network', $network );   // gates the test_amount override (test networks only)
 		$view = ! empty( $body['viewOnly'] ) ? 'view-only' : 'NOT view-only (!)';
-		wp_send_json_success( array( 'msg' => sprintf( 'connected · %s · %s', sanitize_text_field( $body['network'] ?? '?' ), $view ) ) );
+		wp_send_json_success( array( 'msg' => sprintf( 'connected · %s · %s', $network !== '' ? $network : '?', $view ) ) );
 	}
 
 	/** Order screen (admin): show the on-chain payment detail we recorded. */
@@ -294,7 +303,10 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 	 */
 	public function get_xmr_amount( $order ) {
 		$test = trim( (string) $this->get_option( 'test_amount' ) );
-		if ( $test !== '' ) {
+		// test_amount is a TEST-ONLY override. NEVER let it silently fix the price
+		// on a live store: honor it only when the agent is on a confirmed test
+		// network (cached from "Test connection"). on mainnet/unknown → ignore it.
+		if ( $test !== '' && in_array( get_option( 'xmrpay_agent_network', '' ), array( 'stagenet', 'testnet' ), true ) ) {
 			return $this->fmt_xmr( (float) $test );
 		}
 		$currency = strtoupper( $order->get_currency() );
@@ -419,12 +431,34 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'key'       => $order->get_order_key(),
 		), home_url( '/' ) );
 
+		// optional merchant redirect once the payment confirms (live transition only)
+		$redirect = trim( (string) $this->get_option( 'success_redirect' ) );
+		if ( $redirect !== '' ) {
+			$redirect = str_replace(
+				array( '{order_id}', '{order_key}' ),
+				array( rawurlencode( (string) $order_id ), rawurlencode( $order->get_order_key() ) ),
+				$redirect
+			);
+		}
+
+		// once paid, make sure the signed receipt is cached on the order. the webhook
+		// usually delivers it; this back-fills from the agent if it did not (e.g. the
+		// order was completed via the status proxy rather than the webhook).
+		if ( $paid && (string) $order->get_meta( '_xmrpay_receipt' ) === '' ) {
+			$rc = $this->agent()->get_receipt( (string) $order_id );
+			if ( ! is_wp_error( $rc ) && is_array( $rc ) ) {
+				$order->update_meta_data( '_xmrpay_receipt', wp_json_encode( $rc ) );
+				$order->save();
+			}
+		}
+		$receipt_html = $paid ? $this->receipt_block_html( $order ) : '';
+
 		wp_enqueue_script( 'xmrpay-widget' );
 		wp_enqueue_script( 'xmrpay-checkout' );
 		?>
 		<section class="xmrpay-panel" style="margin:24px 0;max-width:420px">
 			<h2><?php esc_html_e( 'Pay with Monero', 'xmr-pay-for-woocommerce' ); ?></h2>
-			<div id="xmrpay-status" data-poll="<?php echo esc_url( $status_url ); ?>" data-paid="<?php echo $paid ? '1' : '0'; ?>"
+			<div id="xmrpay-status" data-poll="<?php echo esc_url( $status_url ); ?>" data-paid="<?php echo $paid ? '1' : '0'; ?>"<?php echo $redirect !== '' ? ' data-redirect="' . esc_url( $redirect ) . '"' : ''; ?>
 				 style="font-weight:600;margin:8px 0;<?php echo $paid ? 'color:#15803d' : 'color:#b45309'; ?>">
 				<?php echo $paid ? esc_html__( '✓ Payment received', 'xmr-pay-for-woocommerce' ) : esc_html__( '● Awaiting payment…', 'xmr-pay-for-woocommerce' ); ?>
 			</div>
@@ -434,8 +468,45 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 						 theme="<?php echo esc_attr( $this->get_option( 'checkout_theme', 'light' ) ); ?>"
 						 lang="<?php echo esc_attr( substr( get_locale(), 0, 2 ) === 'es' ? 'es' : 'en' ); ?>"></xmr-pay>
 			<?php endif; ?>
+			<?php echo $receipt_html; // built with esc_* in receipt_block_html() ?>
 		</section>
 		<?php
+	}
+
+	/**
+	 * The "your cryptographic receipt" block shown once an order is paid: a download
+	 * (the signed envelope as a .json) and a link to the bundled offline verifier
+	 * (the receipt rides in the URL fragment, so the verifier needs no backend).
+	 * Returns '' when no receipt is on the order.
+	 */
+	private function receipt_block_html( $order ) {
+		$json = (string) $order->get_meta( '_xmrpay_receipt' );
+		if ( $json === '' ) {
+			return '';
+		}
+		$env = json_decode( $json, true );
+		if ( ! is_array( $env ) ) {
+			return '';
+		}
+		$fp       = isset( $env['fingerprint'] ) ? (string) $env['fingerprint'] : '';
+		$download = 'data:application/json;charset=utf-8;base64,' . base64_encode( $json );
+		$verify   = esc_url( plugins_url( 'assets/verify-receipt.html', XMRPAY_WC_FILE ) ) . '#' . strtr( base64_encode( $json ), '+/', '-_' );
+		$btn      = 'display:inline-block;margin:8px 8px 0 0;padding:8px 14px;border-radius:6px;font-weight:600;font-size:13px;text-decoration:none';
+		ob_start();
+		?>
+		<div class="xmrpay-receipt" style="margin-top:16px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:8px">
+			<p style="margin:0 0 6px;font-weight:600"><?php esc_html_e( 'Your cryptographic receipt', 'xmr-pay-for-woocommerce' ); ?></p>
+			<p style="margin:0;font-size:12px;color:#6b7280">
+				<?php esc_html_e( 'Signed by the merchant. Download it and verify it yourself — anyone can, forever, with no third party.', 'xmr-pay-for-woocommerce' ); ?>
+				<?php if ( $fp !== '' ) { echo ' ' . esc_html( sprintf( __( 'Signer: %s', 'xmr-pay-for-woocommerce' ), $fp ) ); } ?>
+			</p>
+			<a href="<?php echo esc_attr( $download ); ?>" download="receipt-<?php echo esc_attr( $order->get_id() ); ?>.json"
+			   style="<?php echo esc_attr( $btn ); ?>;background:#ff6600;color:#fff">&#8595; <?php esc_html_e( 'Download receipt', 'xmr-pay-for-woocommerce' ); ?></a>
+			<a href="<?php echo $verify; // esc_url'd base + URL-safe fragment ?>" target="_blank" rel="noopener"
+			   style="<?php echo esc_attr( $btn ); ?>;border:1px solid #d1d5db;color:#111">&#8599; <?php esc_html_e( 'Verify receipt', 'xmr-pay-for-woocommerce' ); ?></a>
+		</div>
+		<?php
+		return ob_get_clean();
 	}
 
 	/** Server-side proxy: the buyer's browser polls this; we query the private agent. */
@@ -527,6 +598,11 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $received !== '' ) { $order->update_meta_data( '_xmrpay_received', $received ); }
 		if ( $confs !== null ) { $order->update_meta_data( '_xmrpay_confirmations', $confs ); }
 		if ( $txids !== '' ) { $order->update_meta_data( '_xmrpay_txids', $txids ); }
+		// the signed receipt (if the agent minted one) — stored verbatim so the
+		// buyer can download + verify it even if the agent later goes offline.
+		if ( isset( $data['receipt'] ) && is_array( $data['receipt'] ) ) {
+			$order->update_meta_data( '_xmrpay_receipt', wp_json_encode( $data['receipt'] ) );
+		}
 		$order->save();
 
 		$note = __( 'Monero payment confirmed by the xmr-pay agent.', 'xmr-pay-for-woocommerce' );
