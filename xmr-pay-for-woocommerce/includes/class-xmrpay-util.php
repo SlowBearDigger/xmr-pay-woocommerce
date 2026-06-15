@@ -1,0 +1,71 @@
+<?php
+/**
+ * Pure, dependency-free helpers — the parts of the gateway worth testing in
+ * isolation: the money math (must be exact) and the webhook signature check.
+ * No WordPress/WooCommerce calls here, so it runs under plain `php` in tests.
+ */
+
+if ( ! defined( 'ABSPATH' ) && ! defined( 'XMRPAY_TESTING' ) ) { exit; }
+
+class XmrPay_Util {
+
+	/** Smallest Monero unit (piconero): 1 XMR = 1e12 pico. */
+	const XMR_DECIMALS = 12;
+
+	/**
+	 * Canonical XMR decimal string: at most 12 decimals (piconero precision),
+	 * trailing zeros trimmed, never empty. This is what the buyer pays AND what
+	 * the agent is told to expect — one string, so they can never drift.
+	 */
+	public static function fmt( $xmr ) {
+		$xmr = (float) $xmr;
+		if ( ! is_finite( $xmr ) || $xmr <= 0 ) {
+			return '0';
+		}
+		// work in piconero INTEGERS, not float decimals: number_format() at 12
+		// places leaks the float64 error (e.g. 12345.6789 -> 12345.678900000001).
+		// round() snaps to the nearest piconero, then we build the string with
+		// integer math so no float tail can survive. (good to ~9.2M XMR < int64.)
+		$pico = (int) round( $xmr * 1000000000000 );
+		if ( $pico <= 0 ) {
+			return '0';
+		}
+		$int  = intdiv( $pico, 1000000000000 );
+		$frac = $pico % 1000000000000;
+		if ( 0 === $frac ) {
+			return (string) $int;
+		}
+		$fs = rtrim( str_pad( (string) $frac, self::XMR_DECIMALS, '0', STR_PAD_LEFT ), '0' );
+		return $int . '.' . $fs;
+	}
+
+	/**
+	 * Convert an order total to XMR at a rate (price of 1 XMR in the order's
+	 * currency). The total already includes discounts, shipping, tax and fees —
+	 * WooCommerce computes it before the gateway runs — so this needs no special
+	 * handling for any of them. Returns a canonical XMR string.
+	 */
+	public static function from_total( $total, $rate ) {
+		$rate = (float) $rate;
+		if ( $rate <= 0 ) {
+			return '0';
+		}
+		return self::fmt( (float) $total / $rate );
+	}
+
+	/**
+	 * Verify an HMAC-SHA256 webhook signature (the agent signs `order.paid`).
+	 * Header form: "sha256=<hex>". Constant-time compare. An empty secret means
+	 * the merchant opted out of verification (returns true).
+	 */
+	public static function verify_sig( $raw, $sig, $secret ) {
+		if ( $secret === '' || $secret === null ) {
+			return true;
+		}
+		if ( ! is_string( $sig ) || $sig === '' ) {
+			return false;
+		}
+		$expected = 'sha256=' . hash_hmac( 'sha256', (string) $raw, (string) $secret );
+		return hash_equals( $expected, $sig );
+	}
+}
