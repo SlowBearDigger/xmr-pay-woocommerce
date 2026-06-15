@@ -80,6 +80,16 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'type'    => 'textarea',
 				'default' => __( 'Pay privately with Monero. Scan the QR — your wallet fills in the exact amount.', 'xmr-pay-for-woocommerce' ),
 			),
+			'checkout_theme' => array(
+				'title'   => __( 'Payment box theme', 'xmr-pay-for-woocommerce' ),
+				'type'    => 'select',
+				'default' => 'light',
+				'options' => array(
+					'light' => __( 'Light (for light store themes)', 'xmr-pay-for-woocommerce' ),
+					'dark'  => __( 'Dark (for dark store themes)', 'xmr-pay-for-woocommerce' ),
+				),
+				'description' => __( 'Match the QR/payment box to your store theme so it does not look bolted-on.', 'xmr-pay-for-woocommerce' ),
+			),
 			'agent_section' => array(
 				'title' => __( 'Your xmr-pay agent', 'xmr-pay-for-woocommerce' ),
 				'type'  => 'title',
@@ -420,7 +430,8 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			</div>
 			<?php if ( ! $paid ) : ?>
 				<xmr-pay address="<?php echo esc_attr( $addr ); ?>" amount="<?php echo esc_attr( $amount ); ?>"
-						 label="<?php echo esc_attr( get_bloginfo( 'name' ) . ' #' . $order_id ); ?>" theme="light"
+						 label="<?php echo esc_attr( get_bloginfo( 'name' ) . ' #' . $order_id ); ?>"
+						 theme="<?php echo esc_attr( $this->get_option( 'checkout_theme', 'light' ) ); ?>"
 						 lang="<?php echo esc_attr( substr( get_locale(), 0, 2 ) === 'es' ? 'es' : 'en' ); ?>"></xmr-pay>
 			<?php endif; ?>
 		</section>
