@@ -3,7 +3,7 @@
  * Plugin Name:       xmr-pay for WooCommerce
  * Plugin URI:        https://github.com/SlowBearDigger/xmr-pay
  * Description:        Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. A thin client of your own xmr-pay scanner-agent (no Monero crypto in PHP, no third party).
- * Version:           0.1.0
+ * Version:           0.1.1
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            SlowBearDigger
@@ -15,7 +15,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'XMRPAY_WC_VERSION', '0.1.0' );
+define( 'XMRPAY_WC_VERSION', '0.1.1' );
 define( 'XMRPAY_WC_FILE', __FILE__ );
 
 // Declare HPOS (High-Performance Order Storage) compatibility.
@@ -28,6 +28,18 @@ add_action( 'before_woocommerce_init', function () {
 // translations: WP.org auto-loads, but this covers self-hosted installs too.
 add_action( 'init', function () {
 	load_plugin_textdomain( 'xmr-pay-for-woocommerce', false, dirname( plugin_basename( XMRPAY_WC_FILE ) ) . '/languages' );
+	// hourly cleanup of expired unpaid orders (no-op unless the merchant set a window)
+	if ( ! wp_next_scheduled( 'xmrpay_expire_orders' ) ) {
+		wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'xmrpay_expire_orders' );
+	}
+} );
+add_action( 'xmrpay_expire_orders', function () {
+	if ( class_exists( 'WC_Gateway_XmrPay' ) ) {
+		( new WC_Gateway_XmrPay() )->expire_orders();
+	}
+} );
+register_deactivation_hook( __FILE__, function () {
+	wp_clear_scheduled_hook( 'xmrpay_expire_orders' );
 } );
 
 add_action( 'plugins_loaded', 'xmrpay_wc_init' );

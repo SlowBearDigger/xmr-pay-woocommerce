@@ -4,7 +4,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -61,10 +61,13 @@ https://demo.xmrpay.shop — a public stagenet demo. Grab test XMR from a stagen
 
 == Changelog ==
 
+= 0.1.1 (beta) =
+* Fix: the "open the payment page" link in the order email pointed at the order-pay page, which redirects for on-hold orders — it now links to the order-received page that renders the QR + live status.
+
 = 0.1.0 (beta) =
 * First public beta. Gateway (classic + Blocks), HPOS support, XMR-native + CoinGecko/fixed pricing, live on-chain progress + top-up, signed HMAC webhooks, exact piconero math, "Test connection", order payment meta box, debug logging.
 
 == Upgrade Notice ==
 
-= 0.1.0 =
-First public beta.
+= 0.1.1 =
+Fixes the payment-page link in order emails.

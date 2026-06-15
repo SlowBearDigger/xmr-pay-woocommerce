@@ -24,7 +24,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$this->method_title       = __( 'Monero (xmr-pay)', 'xmr-pay-for-woocommerce' );
 		$this->method_description = __( 'Accept Monero, non-custodial. Funds go straight to your address; detection runs on your own xmr-pay agent.', 'xmr-pay-for-woocommerce' );
 		$this->has_fields         = false;
-		$this->icon               = '';
+		$this->icon               = apply_filters( 'woocommerce_xmrpay_icon', plugins_url( 'assets/monero-symbol.png', XMRPAY_WC_FILE ) );
 		// non-custodial: we hold no spend key, so we CANNOT push an automatic
 		// refund. 'refunds' is deliberately absent — refunds are manual (see
 		// on_refunded). products only.
@@ -38,6 +38,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
 		add_action( 'woocommerce_thankyou_' . $this->id, array( $this, 'render_payment_panel' ) );
+		// the order-pay page (paying an existing on-hold order from the email/account)
+		// renders the SAME panel — the buyer sees the existing QR, not a new order.
+		add_action( 'woocommerce_receipt_' . $this->id, array( $this, 'render_payment_panel' ) );
+		// put the address + a link to the live payment page in the order email, so a
+		// buyer who closed the tab can still pay.
+		add_action( 'woocommerce_email_before_order_table', array( $this, 'email_instructions' ), 10, 3 );
 		add_action( 'woocommerce_api_xmrpay_webhook', array( $this, 'handle_webhook' ) );
 		add_action( 'woocommerce_order_refunded', array( $this, 'on_refunded' ), 10, 2 );
 		// admin: a "test connection" button on the settings page + a payment-detail
@@ -141,6 +147,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'placeholder' => '',
 				'description' => __( 'TEST ONLY — if set, every order charges this exact XMR amount (ignores the cart total / price feed). Use on stagenet. Leave empty in production.', 'xmr-pay-for-woocommerce' ),
 			),
+			'expiry_hours' => array(
+				'title'       => __( 'Auto-cancel after (hours)', 'xmr-pay-for-woocommerce' ),
+				'type'        => 'number',
+				'default'     => '0',
+				'description' => __( 'Cancel an unpaid order this many hours after it was placed (frees reserved stock). 0 = never. A late payment to a cancelled order is flagged for you, not auto-completed.', 'xmr-pay-for-woocommerce' ),
+				'custom_attributes' => array( 'min' => '0', 'step' => '1' ),
+			),
 			'debug_log' => array(
 				'title'       => __( 'Debug log', 'xmr-pay-for-woocommerce' ),
 				'type'        => 'checkbox',
@@ -148,6 +161,29 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'default'     => 'no',
 			),
 		);
+	}
+
+	/** Scheduled cleanup: cancel unpaid on-hold orders past the expiry window. */
+	public function expire_orders() {
+		$hours = (int) $this->get_option( 'expiry_hours' );
+		if ( $hours <= 0 ) {
+			return;
+		}
+		$ids = wc_get_orders( array(
+			'status'         => 'on-hold',
+			'payment_method' => $this->id,
+			'date_created'   => '<' . ( time() - $hours * HOUR_IN_SECONDS ),
+			'limit'          => 100,
+			'return'         => 'ids',
+		) );
+		foreach ( $ids as $oid ) {
+			$order = wc_get_order( $oid );
+			if ( ! $order || $order->is_paid() ) {
+				continue;
+			}
+			$order->update_status( 'cancelled', __( 'Auto-cancelled: no Monero payment within the expiry window.', 'xmr-pay-for-woocommerce' ) );
+			$this->log( 'expired unpaid order #' . $oid );
+		}
 	}
 
 	/** Settings-page "Test connection" button: pings the agent's /healthz live. */
@@ -308,6 +344,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 	public function process_payment( $order_id ) {
 		$order = wc_get_order( $order_id );
 
+		// already has a subaddress (re-paying via the order-pay page, or a double
+		// submit): reuse it — never allocate a second subaddress for one order.
+		if ( (string) $order->get_meta( '_xmrpay_address' ) !== '' ) {
+			return array( 'result' => 'success', 'redirect' => $this->get_return_url( $order ) );
+		}
+
 		$amount = $this->get_xmr_amount( $order );
 		if ( is_wp_error( $amount ) ) {
 			wc_add_notice( $amount->get_error_message(), 'error' );
@@ -453,6 +495,17 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $order->is_paid() ) {
 			return;
 		}
+		// a late payment for a cancelled/refunded order must NOT silently resurrect
+		// it — the funds are in your wallet; flag it for the merchant to reconcile.
+		if ( in_array( $order->get_status(), array( 'cancelled', 'refunded' ), true ) ) {
+			$order->add_order_note( sprintf(
+				/* translators: %s order status */
+				__( 'Monero payment arrived for a %s order — NOT auto-completed. The funds are in your wallet; reconcile manually.', 'xmr-pay-for-woocommerce' ),
+				$order->get_status()
+			) );
+			$this->log( 'late payment for ' . $order->get_status() . ' order #' . $order->get_id() . ' — not auto-completed', 'warning' );
+			return;
+		}
 		$txids    = isset( $data['txids'] ) && is_array( $data['txids'] ) ? implode( ', ', array_map( 'sanitize_text_field', $data['txids'] ) ) : '';
 		$received = isset( $data['received_xmr'] ) ? sanitize_text_field( (string) $data['received_xmr'] ) : '';
 		$confs    = isset( $data['confirmations'] ) ? absint( $data['confirmations'] ) : null;
@@ -494,5 +547,37 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			__( 'Monero is non-custodial — this %s refund is recorded in WooCommerce only. Send the XMR back manually: ask the customer for a Monero receive address (a tx does not reveal the sender), then pay it from your wallet.', 'xmr-pay-for-woocommerce' ),
 			$amt !== '' ? wc_price( $amt ) : ''
 		) );
+	}
+
+	/**
+	 * Monero payment details in the customer's order email (e.g. the "on hold"
+	 * email) so a buyer who closed the tab can still pay: the address, the amount,
+	 * and a link to the live payment page (QR + status). Skipped once paid.
+	 */
+	public function email_instructions( $order, $sent_to_admin, $plain_text = false ) {
+		if ( $sent_to_admin || ! $order || $order->get_payment_method() !== $this->id || $order->is_paid() ) {
+			return;
+		}
+		$addr   = (string) $order->get_meta( '_xmrpay_address' );
+		$amount = (string) $order->get_meta( '_xmrpay_amount' );
+		if ( $addr === '' ) {
+			return;
+		}
+		// the order-received page renders the QR + live status and works while the
+		// order is on-hold; the order-pay page does NOT (on-hold isn't a payable
+		// status, so it would redirect). link to order-received.
+		$pay_url = $order->get_checkout_order_received_url();
+
+		if ( $plain_text ) {
+			echo "\n" . sprintf( __( 'Pay %1$s XMR to: %2$s', 'xmr-pay-for-woocommerce' ), $amount, $addr ) . "\n";
+			echo sprintf( __( 'Payment page (QR + live status): %s', 'xmr-pay-for-woocommerce' ), esc_url( $pay_url ) ) . "\n\n";
+			return;
+		}
+		echo '<div style="margin:0 0 24px;padding:14px 16px;border:1px solid #e5e7eb;border-radius:8px">';
+		echo '<p style="margin:0 0 8px;font-weight:600">' . esc_html__( 'Complete your Monero payment', 'xmr-pay-for-woocommerce' ) . '</p>';
+		echo '<p style="margin:0 0 6px">' . sprintf( esc_html__( 'Send %s XMR to:', 'xmr-pay-for-woocommerce' ), '<strong>' . esc_html( $amount ) . '</strong>' ) . '</p>';
+		echo '<p style="margin:0 0 10px;word-break:break-all"><code style="font-size:12px">' . esc_html( $addr ) . '</code></p>';
+		echo '<p style="margin:0"><a href="' . esc_url( $pay_url ) . '" style="color:#ff6600;font-weight:600">' . esc_html__( 'Open the payment page (QR + live status) →', 'xmr-pay-for-woocommerce' ) . '</a></p>';
+		echo '</div>';
 	}
 }
