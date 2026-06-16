@@ -4,7 +4,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.4
+Stable tag: 0.1.5-beta
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -61,6 +61,14 @@ https://demo.xmrpay.shop — a public stagenet demo. Grab test XMR from a stagen
 
 == Changelog ==
 
+= 0.1.5 (beta) =
+* Pairs with the **xmr-pay 0.4.0-beta** agent (payment-correctness + reliability release). No store reconfiguration needed.
+* **Funds are never orphaned on expiry.** A partially-paid order is no longer auto-cancelled when its window lapses — the plugin asks the agent, keeps it on hold, and shows a "your funds are safe — contact us" message with the QR hidden.
+* **Overpayment is surfaced.** When a buyer overpays, the exact excess is recorded on the order (meta + note) and shown in the admin payment meta box.
+* **Reconcile safety net.** A 5-minute cron re-polls the agent for on-hold orders and completes (or flags) any the webhook missed — covers webhook outages and node catch-up.
+* **Sync-status on the checkout.** When the agent's node is catching up, the payment page shows "node catching up…" instead of a silent "unpaid".
+* Settings now note that underpayment tolerance / confirmations / expiry are configured **agent-side** (`XMR_TOLERANCE_XMR`, `XMR_MIN_CONFIRMATIONS`, `XMR_EXPIRY_HOURS`).
+
 = 0.1.4 (beta) =
 * Guided setup wizard: a step-by-step onboarding (welcome → connect agent → webhook → pricing → go live) that mirrors the `npx xmr-pay` agent flow, so the three values the agent prints (Agent URL, token, webhook secret) land in the right places without hunting through the full settings form. Live "Test connection" gates the step; the webhook URL is shown with a copy button. Opens automatically on activation; reachable any time from the plugins list ("Setup wizard") or the admin notice. The full settings page is unchanged for fine-tuning.
 
@@ -79,6 +87,9 @@ https://demo.xmrpay.shop — a public stagenet demo. Grab test XMR from a stagen
 * First public beta. Gateway (classic + Blocks), HPOS support, XMR-native + CoinGecko/fixed pricing, live on-chain progress + top-up, signed HMAC webhooks, exact piconero math, "Test connection", order payment meta box, debug logging.
 
 == Upgrade Notice ==
+
+= 0.1.5 =
+Pairs with the xmr-pay 0.4.0-beta agent. Partially-paid orders are never auto-cancelled (funds stay safe), overpayment is recorded, and a 5-minute reconcile cron backs up the webhook. Upgrade both plugin and agent.
 
 = 0.1.4 =
 Adds a guided setup wizard that walks you through connecting your agent, the webhook, and pricing — no change to existing configured stores.

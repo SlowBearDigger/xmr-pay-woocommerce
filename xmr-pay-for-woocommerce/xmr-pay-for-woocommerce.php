@@ -3,7 +3,7 @@
  * Plugin Name:       xmr-pay for WooCommerce
  * Plugin URI:        https://github.com/SlowBearDigger/xmr-pay
  * Description:        Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. A thin client of your own xmr-pay scanner-agent (no Monero crypto in PHP, no third party).
- * Version:           0.1.4
+ * Version:           0.1.5-beta
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            SlowBearDigger
@@ -15,7 +15,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'XMRPAY_WC_VERSION', '0.1.4' );
+define( 'XMRPAY_WC_VERSION', '0.1.5-beta' );
 define( 'XMRPAY_WC_FILE', __FILE__ );
 
 // Declare HPOS (High-Performance Order Storage) compatibility.
@@ -25,6 +25,13 @@ add_action( 'before_woocommerce_init', function () {
 	}
 } );
 
+// a 5-minute cron interval for the reconcile safety net (WP ships hourly+ only).
+add_filter( 'cron_schedules', function ( $s ) {
+	if ( ! isset( $s['xmrpay_5min'] ) ) {
+		$s['xmrpay_5min'] = array( 'interval' => 300, 'display' => __( 'Every 5 minutes (xmr-pay)', 'xmr-pay-for-woocommerce' ) );
+	}
+	return $s;
+} );
 // translations: WP.org auto-loads, but this covers self-hosted installs too.
 add_action( 'init', function () {
 	load_plugin_textdomain( 'xmr-pay-for-woocommerce', false, dirname( plugin_basename( XMRPAY_WC_FILE ) ) . '/languages' );
@@ -32,14 +39,26 @@ add_action( 'init', function () {
 	if ( ! wp_next_scheduled( 'xmrpay_expire_orders' ) ) {
 		wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'xmrpay_expire_orders' );
 	}
+	// safety net: every 5 min, poll the agent for on-hold orders the webhook may
+	// have missed (endpoint down, or the buyer closed the tab). the webhook +
+	// buyer-poll are the fast paths; this guarantees eventual fulfillment.
+	if ( ! wp_next_scheduled( 'xmrpay_reconcile' ) ) {
+		wp_schedule_event( time() + 300, 'xmrpay_5min', 'xmrpay_reconcile' );
+	}
 } );
 add_action( 'xmrpay_expire_orders', function () {
 	if ( class_exists( 'WC_Gateway_XmrPay' ) ) {
 		( new WC_Gateway_XmrPay() )->expire_orders();
 	}
 } );
+add_action( 'xmrpay_reconcile', function () {
+	if ( class_exists( 'WC_Gateway_XmrPay' ) ) {
+		( new WC_Gateway_XmrPay() )->reconcile_on_hold();
+	}
+} );
 register_deactivation_hook( __FILE__, function () {
 	wp_clear_scheduled_hook( 'xmrpay_expire_orders' );
+	wp_clear_scheduled_hook( 'xmrpay_reconcile' );
 } );
 // flag a fresh activation so we can offer the guided setup wizard once.
 register_activation_hook( __FILE__, function () {
