@@ -3,7 +3,7 @@
  * Plugin Name:       xmr-pay for WooCommerce
  * Plugin URI:        https://github.com/SlowBearDigger/xmr-pay
  * Description:        Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. A thin client of your own xmr-pay scanner-agent (no Monero crypto in PHP, no third party).
- * Version:           0.1.3
+ * Version:           0.1.4
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            SlowBearDigger
@@ -15,7 +15,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'XMRPAY_WC_VERSION', '0.1.3' );
+define( 'XMRPAY_WC_VERSION', '0.1.4' );
 define( 'XMRPAY_WC_FILE', __FILE__ );
 
 // Declare HPOS (High-Performance Order Storage) compatibility.
@@ -41,6 +41,11 @@ add_action( 'xmrpay_expire_orders', function () {
 register_deactivation_hook( __FILE__, function () {
 	wp_clear_scheduled_hook( 'xmrpay_expire_orders' );
 } );
+// flag a fresh activation so we can offer the guided setup wizard once.
+register_activation_hook( __FILE__, function () {
+	require_once __DIR__ . '/includes/class-xmrpay-setup.php';
+	XmrPay_Setup::flag_activation();
+} );
 
 add_action( 'plugins_loaded', 'xmrpay_wc_init' );
 function xmrpay_wc_init() {
@@ -54,6 +59,12 @@ function xmrpay_wc_init() {
 	require_once __DIR__ . '/includes/class-xmrpay-util.php';
 	require_once __DIR__ . '/includes/class-xmrpay-agent.php';
 	require_once __DIR__ . '/includes/class-wc-gateway-xmrpay.php';
+
+	// guided setup wizard (admin) — the store-side half of `npx xmr-pay`.
+	if ( is_admin() ) {
+		require_once __DIR__ . '/includes/class-xmrpay-setup.php';
+		new XmrPay_Setup();
+	}
 
 	// let merchants price natively in Monero — register XMR as a WooCommerce
 	// currency (then the cart total IS the XMR amount, no price feed needed).
