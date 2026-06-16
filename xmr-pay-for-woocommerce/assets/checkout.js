@@ -7,7 +7,10 @@
 	if (!host) return;
 	var url = host.getAttribute('data-poll');
 	var already = host.getAttribute('data-paid') === '1';
-	var redirect = host.getAttribute('data-redirect') || '';
+	var rawRedirect = host.getAttribute('data-redirect') || '';
+	// defense in depth (the panel already esc_url's it): only follow an absolute
+	// http(s) URL or a same-origin relative path — never javascript:/data:/protocol-relative.
+	var redirect = (/^https?:\/\//i.test(rawRedirect) || /^\/[^/]/.test(rawRedirect)) ? rawRedirect : '';
 	if (!url) return;
 
 	var L = window.xmrpayL10n || {};
@@ -84,7 +87,8 @@
 			else if (d.status === 'partial') { text = (L.mPartial || 'Received {r} XMR — send {s} more (QR updated).').replace('{r}', d.receivedXmr != null ? d.receivedXmr : '?').replace('{s}', d.shortfallXmr || '?'); applyTopup(d.shortfallXmr); }
 			else if (d.status === 'locked') text = L.mLocked || 'Funds received — maturing on-chain…';
 			else if (d.reachable === false) text = L.mConnecting || 'Connecting to the payment scanner…';
-			else text = L.mWatching || 'Watching the blockchain for your payment…';
+			else if (d.syncing) text = L.mSyncing || 'Node catching up to the blockchain — your payment will appear here shortly.';
+				else text = L.mWatching || 'Watching the blockchain for your payment…';
 		}
 		msg.textContent = text;
 		tip.textContent = (d.tipHeight ? ((L.block || 'Latest block') + ' #' + fmt(d.tipHeight)) : '');

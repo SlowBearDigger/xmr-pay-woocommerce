@@ -100,7 +100,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'agent_section' => array(
 				'title' => __( 'Your xmr-pay agent', 'xmr-pay-for-woocommerce' ),
 				'type'  => 'title',
-				'description' => __( 'The agent you run (see docs/AGENT.md). It holds your view key and does the scanning — this plugin only talks HTTP to it.', 'xmr-pay-for-woocommerce' ),
+				'description' => __( 'The agent you run (see docs/AGENT.md). It holds your view key and does the scanning — this plugin only talks HTTP to it. Detection policy — confirmations required, underpayment tolerance, and order expiry — is set ON the agent (XMR_MIN_CONFIRMATIONS, XMR_TOLERANCE_XMR, XMR_EXPIRY_HOURS), not here, because the agent is what verifies the chain.', 'xmr-pay-for-woocommerce' ),
 			),
 			'agent_url' => array(
 				'title'       => __( 'Agent URL', 'xmr-pay-for-woocommerce' ),
@@ -195,11 +195,68 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		) );
 		foreach ( $ids as $oid ) {
 			$order = wc_get_order( $oid );
-			if ( ! $order || $order->is_paid() ) {
+			if ( ! $order || $order->is_paid() || (string) $order->get_meta( '_xmrpay_address' ) === '' ) {
+				continue;
+			}
+			// ask the agent before cancelling: a payment may have arrived (full or
+			// PARTIAL) that the webhook/poll missed. NEVER auto-cancel an order that
+			// received funds — that would strand the buyer's money on a dead order.
+			$r = $this->agent()->get_order( (string) $oid, 6 );
+			if ( is_wp_error( $r ) ) {
+				continue;   // can't confirm there's no payment → be safe, don't cancel
+			}
+			if ( ! empty( $r['paid'] ) ) {
+				$this->mark_paid( $order, $r );   // arrived just in time
+				continue;
+			}
+			$recv = isset( $r['receivedXmr'] ) && is_numeric( $r['receivedXmr'] ) ? (float) $r['receivedXmr'] : 0.0;
+			if ( $recv > 0 ) {
+				// PARTIAL payment — keep the order alive (a top-up still completes it)
+				// and flag it ONCE for the merchant. matches BTCPay: an expired-but-
+				// partially-paid invoice is preserved + flagged, never silently killed.
+				if ( 'yes' !== $order->get_meta( '_xmrpay_partial_flagged' ) ) {
+					$order->update_meta_data( '_xmrpay_partial_flagged', 'yes' );
+					$order->update_meta_data( '_xmrpay_received', (string) $r['receivedXmr'] );
+					$order->add_order_note( sprintf(
+						/* translators: 1: received XMR, 2: owed XMR */
+						__( 'Partial Monero payment received (%1$s of %2$s XMR) but the order passed its expiry window — NOT auto-cancelled. The funds are in your wallet; await the buyer\'s top-up or refund manually.', 'xmr-pay-for-woocommerce' ),
+						(string) $r['receivedXmr'], (string) $order->get_meta( '_xmrpay_amount' )
+					) );
+					$order->save();
+					$this->log( 'partial-paid order #' . $oid . ' kept past expiry (not cancelled)' );
+				}
 				continue;
 			}
 			$order->update_status( 'cancelled', __( 'Auto-cancelled: no Monero payment within the expiry window.', 'xmr-pay-for-woocommerce' ) );
 			$this->log( 'expired unpaid order #' . $oid );
+		}
+	}
+
+	/**
+	 * Safety net: poll the agent for every on-hold xmrpay order and complete the
+	 * ones it reports paid. Independent of BOTH the buyer's browser AND the agent's
+	 * webhook — so a payment still fulfills even if the webhook never reached us
+	 * (endpoint down/blocked, or the buyer closed the tab). mark_paid() is
+	 * idempotent, so this is safe to run on a schedule.
+	 */
+	public function reconcile_on_hold() {
+		$ids = wc_get_orders( array(
+			'status'         => 'on-hold',
+			'payment_method' => $this->id,
+			'limit'          => 50,
+			'return'         => 'ids',
+		) );
+		foreach ( $ids as $oid ) {
+			$order = wc_get_order( $oid );
+			if ( ! $order || $order->is_paid() || (string) $order->get_meta( '_xmrpay_address' ) === '' ) {
+				continue;
+			}
+			$r = $this->agent()->get_order( (string) $oid, 6 );
+			if ( is_wp_error( $r ) || empty( $r['paid'] ) ) {
+				continue;
+			}
+			$this->log( 'reconcile cron: agent reports #' . $oid . ' paid — completing' );
+			$this->mark_paid( $order, $r );
 		}
 	}
 
@@ -294,6 +351,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$txids = (string) $order->get_meta( '_xmrpay_txids' );
 		if ( $txids !== '' ) {
 			echo '<p style="margin:4px 0 0"><strong>tx:</strong><br><code style="font-size:11px;word-break:break-all">' . esc_html( $txids ) . '</code></p>';
+		}
+		if ( $order->get_meta( '_xmrpay_overpaid' ) === 'yes' ) {
+			echo '<p style="margin:6px 0 0;padding:6px 8px;background:#fffbeb;border:1px solid #f59e0b;border-radius:4px;color:#92400e"><strong>' . esc_html__( 'Overpaid', 'xmr-pay-for-woocommerce' ) . ':</strong> ' . esc_html( (string) $order->get_meta( '_xmrpay_overpaid_xmr' ) ) . ' XMR — ' . esc_html__( 'refund the difference to the buyer.', 'xmr-pay-for-woocommerce' ) . '</p>';
 		}
 		echo '</div>';
 	}
@@ -485,15 +545,33 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 		$receipt_html = $paid ? $this->receipt_block_html( $order ) : '';
 
+		// overpayment: the buyer sent more than owed. tell them to contact the store
+		// for a refund of the difference (Monero is non-custodial — no auto-refund).
+		$overpaid     = $paid && $order->get_meta( '_xmrpay_overpaid' ) === 'yes';
+		$overpaid_xmr = (string) $order->get_meta( '_xmrpay_overpaid_xmr' );
+		// terminal (cancelled/expired/failed) + unpaid: never invite a payment to a
+		// dead order. tell the buyer their funds are safe if they already paid.
+		$terminal = ! $paid && in_array( $order->get_status(), array( 'cancelled', 'failed' ), true );
+
 		wp_enqueue_script( 'xmrpay-widget' );
 		wp_enqueue_script( 'xmrpay-checkout' );
 		?>
 		<section class="xmrpay-panel" style="margin:24px 0;max-width:420px">
 			<h2><?php esc_html_e( 'Pay with Monero', 'xmr-pay-for-woocommerce' ); ?></h2>
+			<?php if ( $terminal ) : ?>
+				<div style="margin:8px 0;padding:11px 13px;border:1px solid #f59e0b;border-radius:6px;color:#92400e;background:#fffbeb;font-size:13px;line-height:1.55">
+					<?php echo esc_html( sprintf( __( 'This order (#%s) has expired. If you already sent a Monero payment, don\'t worry — your funds are safe in our wallet. Please contact us with your order number and we will complete it or refund you.', 'xmr-pay-for-woocommerce' ), $order_id ) ); ?>
+				</div>
+			<?php else : ?>
 			<div id="xmrpay-status" data-poll="<?php echo esc_url( $status_url ); ?>" data-paid="<?php echo $paid ? '1' : '0'; ?>"<?php echo $redirect !== '' ? ' data-redirect="' . esc_url( $redirect ) . '"' : ''; ?>
 				 style="font-weight:600;margin:8px 0;<?php echo $paid ? 'color:#15803d' : 'color:#b45309'; ?>">
 				<?php echo $paid ? esc_html__( '✓ Payment received', 'xmr-pay-for-woocommerce' ) : esc_html__( '● Awaiting payment…', 'xmr-pay-for-woocommerce' ); ?>
 			</div>
+			<?php if ( $overpaid ) : ?>
+				<div class="xmrpay-overpaid" style="margin:10px 0;padding:11px 13px;border:1px solid #f59e0b;border-radius:6px;color:#92400e;background:#fffbeb;font-size:13px;line-height:1.5">
+					<?php echo esc_html( sprintf( __( 'You overpaid %s XMR. Please contact the store to arrange a refund of the difference.', 'xmr-pay-for-woocommerce' ), $overpaid_xmr ) ); ?>
+				</div>
+			<?php endif; ?>
 			<?php if ( ! $paid ) : ?>
 				<xmr-pay address="<?php echo esc_attr( $addr ); ?>" amount="<?php echo esc_attr( $amount ); ?>"
 						 label="<?php echo esc_attr( get_bloginfo( 'name' ) . ' #' . $order_id ); ?>"
@@ -501,6 +579,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 						 lang="<?php echo esc_attr( substr( get_locale(), 0, 2 ) === 'es' ? 'es' : 'en' ); ?>"></xmr-pay>
 			<?php endif; ?>
 			<?php echo $receipt_html; // built with esc_* in receipt_block_html() ?>
+			<?php endif; ?>
 		</section>
 		<?php
 	}
@@ -579,6 +658,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'confirmations'    => $num( 'confirmations' ),
 			'minConfirmations' => $num( 'minConfirmations' ),
 			'tipHeight'        => $num( 'tipHeight' ),
+			// (A) the agent is still catching up to the chain tip — the buyer's UI can
+			// say "node syncing" instead of a bare "pending" that looks like a miss.
+			'syncing'          => ! empty( $r['syncing'] ),
 			'reachable'        => true,
 		) );
 	}
@@ -644,16 +726,30 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			$this->log( 'late payment for ' . $order->get_status() . ' order #' . $order->get_id() . ' — not auto-completed', 'warning' );
 			return;
 		}
+		// accept BOTH key styles: the signed webhook sends snake_case (received_xmr),
+		// the agent's GET /order/:id returns camelCase (receivedXmr). the reconcile
+		// cron + the buyer-poll path feed the latter, so fall back to it — otherwise
+		// an order completed via those paths would miss its received/overpaid detail.
+		$received_raw = isset( $data['received_xmr'] ) ? $data['received_xmr'] : ( $data['receivedXmr'] ?? null );
+		$overpaid_raw = isset( $data['overpaid_xmr'] ) ? $data['overpaid_xmr'] : ( $data['overpaidXmr'] ?? null );
 		$txids    = isset( $data['txids'] ) && is_array( $data['txids'] ) ? implode( ', ', array_map( 'sanitize_text_field', $data['txids'] ) ) : '';
-		$received = isset( $data['received_xmr'] ) ? sanitize_text_field( (string) $data['received_xmr'] ) : '';
+		$received = $received_raw !== null ? sanitize_text_field( (string) $received_raw ) : '';
 		$confs    = isset( $data['confirmations'] ) ? absint( $data['confirmations'] ) : null;
 		$owed     = (string) $order->get_meta( '_xmrpay_amount' );
+		$overpaid     = ! empty( $data['overpaid'] );
+		$overpaid_xmr = $overpaid_raw !== null ? sanitize_text_field( (string) $overpaid_raw ) : '0';
 
 		// stash the payment detail on the order so the merchant has everything:
 		// what was owed, what landed, the confirmations, and the tx hash(es).
 		if ( $received !== '' ) { $order->update_meta_data( '_xmrpay_received', $received ); }
 		if ( $confs !== null ) { $order->update_meta_data( '_xmrpay_confirmations', $confs ); }
 		if ( $txids !== '' ) { $order->update_meta_data( '_xmrpay_txids', $txids ); }
+		// buyer sent MORE than owed — record the exact excess so the merchant can
+		// refund it (Monero is non-custodial: it must be sent back by hand).
+		if ( $overpaid ) {
+			$order->update_meta_data( '_xmrpay_overpaid', 'yes' );
+			$order->update_meta_data( '_xmrpay_overpaid_xmr', $overpaid_xmr );
+		}
 		// the signed receipt (if the agent minted one) — stored verbatim so the
 		// buyer can download + verify it even if the agent later goes offline.
 		if ( isset( $data['receipt'] ) && is_array( $data['receipt'] ) ) {
@@ -665,6 +761,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $received !== '' ) { $note .= ' ' . sprintf( __( 'Received: %1$s XMR (owed %2$s).', 'xmr-pay-for-woocommerce' ), $received, $owed ); }
 		if ( $confs !== null ) { $note .= ' ' . sprintf( __( 'Confirmations: %d.', 'xmr-pay-for-woocommerce' ), $confs ); }
 		if ( $txids !== '' ) { $note .= ' ' . sprintf( __( 'tx: %s', 'xmr-pay-for-woocommerce' ), $txids ); }
+		if ( $overpaid ) { $note .= ' ' . sprintf( __( 'OVERPAID by %s XMR — the buyer was asked to contact you; refund the difference manually.', 'xmr-pay-for-woocommerce' ), $overpaid_xmr ); }
 		$order->add_order_note( $note );
 		$this->log( 'marked paid #' . $order->get_id() . ' · received ' . $received . ' · tx ' . $txids );
 
