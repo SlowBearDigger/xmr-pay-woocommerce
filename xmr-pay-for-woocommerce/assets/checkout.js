@@ -93,20 +93,41 @@
 	if (already) { paint({ paid: true }); return; }
 	paint({ status: 'pending' });
 
-	var stopped = false;
-	function tick() {
+	// Poll politely: this runs on the MERCHANT's server (every tick = a WP request
+	// + an HTTP call to their agent). So we (a) never poll a hidden/backgrounded
+	// tab, (b) ramp the interval as the wait grows, (c) hard-stop after a few hours
+	// so an abandoned open tab can't poll forever, and (d) stop on a terminal state.
+	var stopped = false, timer = null, started = Date.now();
+	var MAX_MS = 6 * 60 * 60 * 1000; // give up after ~6h (well past any expiry window)
+	function interval() {
+		var elapsed = Date.now() - started;
+		if (elapsed > 300000) return 30000; // after 5 min → every 30s
+		if (elapsed > 60000) return 15000;  // after 1 min → every 15s
+		return 6000;                        // first minute → every 6s
+	}
+	function schedule() { if (stopped) return; clearTimeout(timer); timer = setTimeout(run, interval()); }
+	function run() {
 		if (stopped) return;
+		if (Date.now() - started > MAX_MS) { stopped = true; return; }
+		if (document.hidden) { schedule(); return; } // don't hit the server for a tab nobody is looking at
 		fetch(url, { headers: { 'Accept': 'application/json' } })
 			.then(function (r) { return r.json(); })
 			.then(function (d) {
 				paint(d || {});
+				// terminal: the order was cancelled/expired server-side — stop polling
+				// a dead order (it will never flip to paid).
+				if (d && d.terminal) { stopped = true; return; }
 				// on the live paid transition: send the buyer to the merchant's
 				// redirect if set, otherwise reload so the page shows the confirmed
 				// state + the downloadable receipt.
-				if (d && d.paid) { stopped = true; setTimeout(function () { redirect ? (window.location.href = redirect) : location.reload(); }, 1800); }
+				if (d && d.paid) { stopped = true; setTimeout(function () { redirect ? (window.location.href = redirect) : location.reload(); }, 1800); return; }
+				schedule();
 			})
-			.catch(function () { /* transient — keep watching */ });
+			.catch(function () { schedule(); /* transient — keep watching */ });
 	}
-	setInterval(tick, 6000);
-	setTimeout(tick, 1200);
+	// resume quickly when the buyer comes back to the tab
+	document.addEventListener('visibilitychange', function () {
+		if (!document.hidden && !stopped) { clearTimeout(timer); timer = setTimeout(run, 400); }
+	});
+	timer = setTimeout(run, 1200);
 })();

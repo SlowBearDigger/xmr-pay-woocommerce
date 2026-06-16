@@ -52,9 +52,9 @@ class XmrPay_Agent {
 	 * Live status of an order.
 	 * @return array|WP_Error { paid, status, receivedXmr, shortfallXmr, confirmations, txids }
 	 */
-	public function get_order( $id ) {
+	public function get_order( $id, $timeout = 20 ) {
 		$res = wp_remote_get( $this->url . '/order/' . rawurlencode( (string) $id ), array(
-			'timeout' => 20,
+			'timeout' => max( 2, (int) $timeout ),
 			'headers' => $this->headers(),
 		) );
 		return $this->decode( $res, array( 200 ) );
@@ -64,9 +64,9 @@ class XmrPay_Agent {
 	 * The signed receipt for a paid order — the envelope to hand the buyer.
 	 * @return array|WP_Error the signed receipt envelope { typ, receipt, pubkey, fingerprint, sig }
 	 */
-	public function get_receipt( $id ) {
+	public function get_receipt( $id, $timeout = 20 ) {
 		$res = wp_remote_get( $this->url . '/receipt/' . rawurlencode( (string) $id ), array(
-			'timeout' => 20,
+			'timeout' => max( 2, (int) $timeout ),
 			'headers' => $this->headers(),
 		) );
 		return $this->decode( $res, array( 200 ) );

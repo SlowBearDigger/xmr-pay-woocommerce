@@ -347,7 +347,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return $this->fmt_xmr( $total / $rate );
 	}
 
-	/** XMR/fiat rate from CoinGecko (the merchant's own key if set), cached 60s. */
+	/** XMR/fiat rate from CoinGecko (the merchant's own key if set), cached 3 min. */
 	private function xmr_rate( $currency ) {
 		$vs  = strtolower( $currency );
 		$key = 'xmrpay_rate_' . $vs;
@@ -369,7 +369,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			return new WP_Error( 'xmrpay_rate', sprintf( __( 'No XMR price for %s.', 'xmr-pay-for-woocommerce' ), $currency ) );
 		}
 		$rate = (float) $body['monero'][ $vs ];
-		set_transient( $key, $rate, 60 );
+		set_transient( $key, $rate, 180 );
 		return $rate;
 	}
 
@@ -469,10 +469,18 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		// usually delivers it; this back-fills from the agent if it did not (e.g. the
 		// order was completed via the status proxy rather than the webhook).
 		if ( $paid && (string) $order->get_meta( '_xmrpay_receipt' ) === '' ) {
-			$rc = $this->agent()->get_receipt( (string) $order_id );
-			if ( ! is_wp_error( $rc ) && is_array( $rc ) ) {
-				$order->update_meta_data( '_xmrpay_receipt', wp_json_encode( $rc ) );
-				$order->save();
+			// back-fill at most once every few minutes per order: if the agent has no
+			// receipt yet (or never will, e.g. watch-mode) we must not hit it on every
+			// single render/refresh of this page.
+			$cooldown = 'xmrpay_rcpt_' . (int) $order_id;
+			if ( false === get_transient( $cooldown ) ) {
+				set_transient( $cooldown, 1, 3 * MINUTE_IN_SECONDS );
+				$rc = $this->agent()->get_receipt( (string) $order_id, 8 );
+				if ( ! is_wp_error( $rc ) && is_array( $rc ) ) {
+					$order->update_meta_data( '_xmrpay_receipt', wp_json_encode( $rc ) );
+					$order->save();
+					delete_transient( $cooldown );
+				}
 			}
 		}
 		$receipt_html = $paid ? $this->receipt_block_html( $order ) : '';
@@ -544,7 +552,15 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $order->is_paid() ) {
 			wp_send_json( array( 'paid' => true, 'status' => 'paid' ) );
 		}
-		$r = $this->agent()->get_order( (string) $order_id );
+		// terminal: a cancelled/failed/refunded order will never flip to paid — tell
+		// the client to STOP polling (and skip the agent call). a late payment to it
+		// is handled out-of-band by mark_paid's reconcile note.
+		if ( in_array( $order->get_status(), array( 'cancelled', 'failed', 'refunded' ), true ) ) {
+			wp_send_json( array( 'paid' => false, 'status' => $order->get_status(), 'terminal' => true ) );
+		}
+		// short timeout: this is a buyer poll, not a checkout step — never tie up a
+		// PHP worker for 20s on a slow agent (workers would pile up under polling).
+		$r = $this->agent()->get_order( (string) $order_id, 6 );
 		if ( is_wp_error( $r ) ) {
 			// the agent is unreachable — surface it as a transient "watching" state,
 			// not an error (the buyer's payment is on-chain regardless).
