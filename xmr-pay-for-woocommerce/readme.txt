@@ -4,7 +4,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.3
+Stable tag: 0.1.4
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -61,6 +61,9 @@ https://demo.xmrpay.shop — a public stagenet demo. Grab test XMR from a stagen
 
 == Changelog ==
 
+= 0.1.4 (beta) =
+* Guided setup wizard: a step-by-step onboarding (welcome → connect agent → webhook → pricing → go live) that mirrors the `npx xmr-pay` agent flow, so the three values the agent prints (Agent URL, token, webhook secret) land in the right places without hunting through the full settings form. Live "Test connection" gates the step; the webhook URL is shown with a copy button. Opens automatically on activation; reachable any time from the plugins list ("Setup wizard") or the admin notice. The full settings page is unchanged for fine-tuning.
+
 = 0.1.3 (beta) =
 * Cryptographic receipts: once an order is paid, the order-received page shows a "Download receipt" (a merchant-signed receipt) plus a one-click link to a bundled, offline, dependency-free verifier — anyone can verify it forever, no third party. The signed receipt is also stored on the order.
 * New "Redirect after payment (URL)" setting: send the buyer to a custom page (a thank-you, a digital download, etc.) the moment the payment confirms. Supports {order_id} / {order_key} placeholders.
@@ -76,6 +79,9 @@ https://demo.xmrpay.shop — a public stagenet demo. Grab test XMR from a stagen
 * First public beta. Gateway (classic + Blocks), HPOS support, XMR-native + CoinGecko/fixed pricing, live on-chain progress + top-up, signed HMAC webhooks, exact piconero math, "Test connection", order payment meta box, debug logging.
 
 == Upgrade Notice ==
+
+= 0.1.4 =
+Adds a guided setup wizard that walks you through connecting your agent, the webhook, and pricing — no change to existing configured stores.
 
 = 0.1.3 =
 Adds downloadable, verifiable cryptographic receipts and an optional post-payment redirect.
