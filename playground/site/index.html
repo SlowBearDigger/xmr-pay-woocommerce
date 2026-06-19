@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xmr-pay for WooCommerce — try it in your browser</title>
+<meta name="description" content="Launch a real WordPress + WooCommerce with the xmr-pay Monero plugin pre-installed, sandboxed in your browser. Run the setup wizard, explore the settings, no install.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23FF6600'/><text x='16' y='24' font-size='22' text-anchor='middle' fill='black' font-family='monospace' font-weight='800'>x</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#000;--ink:#fff;--mut:#8b8b8b;--line:rgba(255,255,255,.22);--panel:#0a0a0a;
+    --orange:#ff6600;--green:#22c55e;--amber:#f59e0b;
+    --mono:"JetBrains Mono",ui-monospace,monospace;--sans:"Space Grotesk",-apple-system,sans-serif; }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  a{color:inherit;text-decoration:none}
+  .bgfx{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+  .bgfx .grid{position:absolute;inset:0;opacity:.5;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:34px 34px;mask-image:radial-gradient(120% 90% at 70% -10%,#000 30%,transparent 80%)}
+  .bgfx .skew{position:absolute;top:0;right:8%;width:46vw;height:120%;border-left:1px solid var(--line);opacity:.5;transform:skewX(-12deg);transform-origin:top right}
+  .wrap{position:relative;z-index:1;max-width:920px;margin:0 auto;padding:0 22px}
+  .tag{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+  .chip{display:inline-flex;align-items:center;gap:8px;background:var(--orange);color:#000;border:2px solid var(--ink);box-shadow:4px 4px 0 0 var(--ink);padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;transform:rotate(-1.4deg)}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:20px 0;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;letter-spacing:-.02em}
+  .mark{width:30px;height:30px;background:var(--orange);border:2px solid var(--ink);display:grid;place-items:center;font-family:var(--mono);font-weight:800;color:#000}
+  nav .links{display:flex;gap:16px;flex-wrap:wrap}
+  nav .links a{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+  nav .links a:hover{color:var(--ink)}
+  .hero{padding:54px 0 26px;max-width:720px}
+  .hero h1{font-size:clamp(34px,6vw,58px);line-height:.96;letter-spacing:-.04em;margin:16px 0 16px}
+  .hero h1 .o{color:var(--orange)}
+  .hero .lede{font-family:var(--mono);font-size:14px;color:#cfcfcf;border-left:3px solid var(--orange);padding:8px 0 8px 16px;background:linear-gradient(90deg,rgba(255,102,0,.06),transparent)}
+  .hero .lede b{background:var(--orange);color:#000;padding:0 5px}
+  .launch{display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:18px 26px;background:var(--orange);color:#000;border:2px solid var(--ink);box-shadow:6px 6px 0 0 #fff;cursor:pointer;transition:transform .12s,box-shadow .12s;margin:30px 0 8px}
+  .launch:hover{transform:translate(3px,3px);box-shadow:2px 2px 0 0 #fff}
+  .boot{font-family:var(--mono);font-size:11.5px;color:var(--mut);margin-bottom:46px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:40px}
+  @media(max-width:720px){ .grid3{grid-template-columns:1fr} }
+  .card{background:var(--panel);border:2px solid var(--ink);box-shadow:5px 5px 0 0 var(--orange);padding:18px}
+  .card .n{font-family:var(--mono);font-weight:800;font-size:13px;color:var(--orange)}
+  .card h3{font-size:15px;margin:8px 0 6px}
+  .card p{font-family:var(--mono);font-size:12px;color:#bdbdbd;line-height:1.6}
+  .note{border:2px solid var(--amber);padding:16px 18px;margin-bottom:34px;background:rgba(245,158,11,.06)}
+  .note .tag{color:var(--amber)}
+  .note p{font-family:var(--mono);font-size:12.5px;color:#d8cdb6;line-height:1.7;margin-top:6px}
+  .note a{color:var(--orange);font-weight:700}
+  .creds{background:var(--panel);border:2px solid var(--ink);box-shadow:5px 5px 0 0 var(--orange);padding:18px 20px;margin-bottom:30px}
+  .creds h3{font-size:15px;margin:8px 0 4px}
+  .creds .hint{font-family:var(--mono);font-size:11.5px;color:var(--mut);margin-bottom:14px;line-height:1.65}
+  .creds .hint b{color:#fff}
+  .cred{margin:12px 0}
+  .cred .k{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin-bottom:4px}
+  .cred .v{display:flex;align-items:stretch;border:2px solid var(--line)}
+  .cred .v code{flex:1;font-family:var(--mono);font-size:11px;color:#cfcfcf;padding:9px 11px;word-break:break-all;background:#000;min-width:0}
+  .cred .v button{flex:none;font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:0 14px;background:#0a0a0a;color:var(--ink);border:0;border-left:2px solid var(--line);cursor:pointer}
+  .cred .v button:hover{background:var(--orange);color:#000}
+  .cred .v button.ok{background:var(--green);color:#000}
+  .more{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:50px}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:12px 16px;background:#0a0a0a;color:var(--ink);border:2px solid var(--ink);box-shadow:4px 4px 0 0 var(--ink);transition:transform .12s,box-shadow .12s}
+  .btn:hover{transform:translate(3px,3px);box-shadow:1px 1px 0 0 var(--ink)}
+  footer{border-top:1px solid var(--line);padding:22px 0 44px;font-family:var(--mono);font-size:11px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="bgfx"><div class="grid"></div><div class="skew"></div></div>
+<div class="wrap">
+  <nav>
+    <a class="brand" href="https://xmrpay.shop"><span class="mark">x</span>xmr-pay</a>
+    <div class="links">
+      <a href="https://xmrpay.shop/demo.html">How it works ↗</a>
+      <a href="https://demo.xmrpay.shop" target="_blank" rel="noopener">Demo store ↗</a>
+      <a href="https://github.com/SlowBearDigger/xmr-pay-woocommerce" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <span class="chip">◢ WordPress · WooCommerce</span>
+    <h1>Try the plugin.<br><span class="o">In your browser.</span></h1>
+    <p class="lede">A <b>real</b> WordPress + WooCommerce with the <b>xmr-pay</b> Monero plugin pre-installed — running entirely in your browser via WordPress Playground. No install, no signup, nothing to clean up. It boots straight into the setup wizard.</p>
+    <a class="launch" id="launch" href="#">▶ Launch the sandbox</a>
+    <div class="boot">boots a full WordPress in ~15s · resets when you close the tab · 100% client-side</div>
+
+    <div class="grid3">
+      <div class="card"><div class="n">01</div><h3>It boots a real store</h3><p>WordPress + WooCommerce + the gateway, installed and activated for you — not screenshots, the actual admin.</p></div>
+      <div class="card"><div class="n">02</div><h3>Run the setup wizard</h3><p>Pick a mode, drop in a stagenet address + view key, and walk the onboarding exactly as a merchant would.</p></div>
+      <div class="card"><div class="n">03</div><h3>Explore the settings</h3><p>The three modes (auto-detect, "I've paid", agent), pricing, the checkout panel — poke at all of it.</p></div>
+    </div>
+
+    <div class="creds">
+      <span class="tag" style="color:var(--orange)">// no wallet? use this stagenet test one</span>
+      <h3>Test wallet — paste into the wizard</h3>
+      <p class="hint">A disposable <b>stagenet</b>, <b>view-only</b> wallet — it can read incoming payments, never spend, and holds zero real value. The address + node are already pre-filled in the sandbox; the wizard just needs the <b>view key</b>. (Never paste a <b>mainnet</b> key into any public sandbox.)</p>
+      <div class="cred"><div class="k">Monero address (stagenet)</div><div class="v"><code>59iRx5JkUsgFg93DWCDsDUBHj8HFnuYLjPPRDapzgfuSYLeb36GKJVHdJ6XAP5K2QJC7TqVdpsthr6JfyMtaSP6bGBPVRCb</code><button type="button" data-c>copy</button></div></div>
+      <div class="cred"><div class="k">Private view key</div><div class="v"><code>0d5a918c9be6a730194a59c64e07e9f8bdba44c38ea697dfddb18663112e940b</code><button type="button" data-c>copy</button></div></div>
+      <div class="cred"><div class="k">Node (stagenet)</div><div class="v"><code>http://node.monerodevs.org:38089</code><button type="button" data-c>copy</button></div></div>
+    </div>
+
+    <div class="note">
+      <span class="tag">// honest note</span>
+      <p>Paste the view key above to finish the wizard. But the browser sandbox has no GMP and can't reach a Monero node, so <b>live on-chain detection won't run here</b> — the sandbox is for the admin / setup experience. To watch a payment actually settle on stagenet, use the real store at <a href="https://demo.xmrpay.shop" target="_blank" rel="noopener">demo.xmrpay.shop</a>.</p>
+    </div>
+
+    <div class="more">
+      <a class="btn" href="https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest/download/xmr-pay-for-woocommerce.zip">↓ Download the plugin (.zip)</a>
+      <a class="btn" href="https://demo.xmrpay.shop" target="_blank" rel="noopener">Live demo store →</a>
+      <a class="btn" href="https://xmrpay.shop/demo.html">How the library works →</a>
+    </div>
+  </header>
+
+  <footer>xmr-pay // MIT // a goxmr project · the sandbox is a real WordPress, sandboxed in your browser by <a href="https://wordpress.github.io/wordpress-playground/" target="_blank" rel="noopener" style="color:var(--orange)">WordPress Playground</a></footer>
+</div>
+
+<script>
+  // launch the Playground blueprint (always the latest on main)
+  var BLUEPRINT = 'https://raw.githubusercontent.com/SlowBearDigger/xmr-pay-woocommerce/main/playground/blueprint.json';
+  var URL = 'https://playground.wordpress.net/?blueprint-url=' + encodeURIComponent(BLUEPRINT);
+  var a = document.getElementById('launch');
+  a.href = URL;
+  a.addEventListener('click', function (e) { e.preventDefault(); window.open(URL, '_blank', 'noopener'); });
+
+  // copy buttons for the test-wallet credentials
+  document.querySelectorAll('.cred .v button[data-c]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var code = b.parentElement.querySelector('code').textContent;
+      navigator.clipboard && navigator.clipboard.writeText(code);
+      var t = b.textContent; b.classList.add('ok'); b.textContent = 'copied ✓';
+      setTimeout(function () { b.classList.remove('ok'); b.textContent = t; }, 1300);
+    });
+  });
+</script>
+</body>
+</html>
