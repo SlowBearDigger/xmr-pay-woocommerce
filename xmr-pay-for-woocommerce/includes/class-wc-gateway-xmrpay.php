@@ -48,10 +48,10 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		// proof mode: the buyer submits a txid here and WordPress verifies it on-chain.
 		add_action( 'woocommerce_api_xmrpay_verify', array( $this, 'handle_verify' ) );
 		add_action( 'woocommerce_order_refunded', array( $this, 'on_refunded' ), 10, 2 );
-		// admin: a "test connection" button on the settings page + a payment-detail
-		// block on the order screen (HPOS-safe hook).
-		add_action( 'wp_ajax_xmrpay_test_agent', array( $this, 'ajax_test_agent' ) );
-		add_action( 'wp_ajax_xmrpay_test_node', array( $this, 'ajax_test_node' ) );
+		// admin: a payment-detail block on the order screen (HPOS-safe hook).
+		// NB: the wp_ajax_xmrpay_test_* handlers are registered at the top level (in
+		// the main plugin file), NOT here — admin-ajax requests don't construct the
+		// gateway, so a handler bound in this constructor would never fire (HTTP 400).
 		add_action( 'admin_notices', array( $this, 'maybe_warn_gmp' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'admin_assets' ) );
 		add_action( 'woocommerce_admin_order_data_after_billing_address', array( $this, 'admin_order_details' ) );

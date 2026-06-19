@@ -138,6 +138,20 @@ function xmrpay_wc_init() {
 	// proxied server-side to the private agent.
 	add_action( 'wc_ajax_xmrpay_status', 'xmrpay_wc_ajax_status' );
 	add_action( 'wc_ajax_nopriv_xmrpay_status', 'xmrpay_wc_ajax_status' );
+
+	// admin-ajax for the settings/wizard "Check setup" + "Test connection" buttons.
+	// Registered here (not in the gateway constructor) because admin-ajax requests
+	// don't construct the gateway — a constructor-bound handler would 400.
+	add_action( 'wp_ajax_xmrpay_test_node', 'xmrpay_wc_ajax_test_node' );
+	add_action( 'wp_ajax_xmrpay_test_agent', 'xmrpay_wc_ajax_test_agent' );
+}
+
+function xmrpay_wc_ajax_test_node() {
+	( new WC_Gateway_XmrPay() )->ajax_test_node();
+}
+
+function xmrpay_wc_ajax_test_agent() {
+	( new WC_Gateway_XmrPay() )->ajax_test_agent();
 }
 
 function xmrpay_wc_ajax_status() {
