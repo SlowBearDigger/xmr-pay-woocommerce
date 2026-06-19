@@ -1,0 +1,39 @@
+{
+  "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+  "meta": {
+    "title": "xmr-pay for WooCommerce — sandbox (stagenet)",
+    "description": "Try the admin: install, run the setup wizard, explore the gateway settings. Runs entirely in your browser. NOTE: live on-chain detection needs a real host (the browser sandbox has no GMP and can't reach a Monero node) — see demo.xmrpay.shop for a live stagenet checkout."
+  },
+  "landingPage": "/wp-admin/admin.php?page=xmrpay-setup",
+  "preferredVersions": { "php": "8.2", "wp": "latest" },
+  "phpExtensionBundles": ["kitchen-sink"],
+  "features": { "networking": true },
+  "login": true,
+  "siteOptions": {
+    "blogname": "xmr-pay Sandbox (stagenet)",
+    "woocommerce_currency": "USD",
+    "woocommerce_default_country": "US:CA",
+    "woocommerce_calc_taxes": "no",
+    "woocommerce_store_address": "1 Test St",
+    "woocommerce_store_city": "Townsville",
+    "woocommerce_store_postcode": "90210"
+  },
+  "plugins": ["woocommerce"],
+  "steps": [
+    {
+      "step": "installPlugin",
+      "pluginData": {
+        "resource": "url",
+        "url": "https://raw.githubusercontent.com/SlowBearDigger/xmr-pay-woocommerce/main/playground/xmr-pay-for-woocommerce-0.1.5-beta.zip"
+      }
+    },
+    {
+      "step": "runPHP",
+      "code": "<?php require_once('/wordpress/wp-load.php'); update_option('woocommerce_xmrpay_settings', array('enabled'=>'yes','mode'=>'watch','title'=>'Monero (XMR)','description'=>'Pay privately with Monero. Scan the QR — your wallet fills in the exact amount.','xmr_address'=>'59iRx5JkUsgFg93DWCDsDUBHj8HFnuYLjPPRDapzgfuSYLeb36GKJVHdJ6XAP5K2QJC7TqVdpsthr6JfyMtaSP6bGBPVRCb','view_key'=>'','nodes'=>'http://node.monerodevs.org:38089','proof_min_conf'=>'1','price_source'=>'fixed','fixed_rate'=>'150')); echo 'CONFIG_OK';"
+    },
+    {
+      "step": "runPHP",
+      "code": "<?php require_once('/wordpress/wp-load.php'); $ex=wc_get_products(array('name'=>'Test Item','limit'=>1)); if(!$ex){$p=new WC_Product_Simple();$p->set_name('Test Item');$p->set_regular_price('12');$p->set_status('publish');$p->save();} echo 'PRODUCT_OK';"
+    }
+  ]
+}

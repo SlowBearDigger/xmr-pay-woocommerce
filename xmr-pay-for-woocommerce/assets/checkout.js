@@ -135,3 +135,32 @@
 	});
 	timer = setTimeout(run, 1200);
 })();
+
+// ── proof mode: the "I've paid — verify" txid form ──────────────────────────
+// wired from the panel's <div class="xmrpay-proof" data-verify="…">; strings come
+// from window.xmrpayL10n (localised). Moved out of an inline <script> for Plugin Check.
+(function () {
+	var box = document.querySelector('.xmrpay-proof[data-verify]');
+	if (!box) { return; }
+	var url = box.getAttribute('data-verify');
+	var btn = box.querySelector('#xmrpay-verify-btn');
+	var inp = box.querySelector('#xmrpay-txid');
+	var msg = box.querySelector('#xmrpay-proof-msg');
+	if (!btn || !inp || !msg) { return; }
+	var L = window.xmrpayL10n || {};
+	function say(t, c) { msg.textContent = t; msg.style.color = c || '#374151'; }
+	btn.addEventListener('click', function () {
+		var txid = (inp.value || '').trim().toLowerCase();
+		if (!/^[0-9a-f]{64}$/.test(txid)) { say(L.pBadTxid || 'Invalid transaction ID', '#b91c1c'); inp.focus(); return; }
+		btn.disabled = true; say(L.pChecking || 'Checking…', '#b45309');
+		var fd = new FormData(); fd.append('txid', txid);
+		fetch(url, { method: 'POST', body: fd })
+			.then(function (r) { return r.json(); })
+			.then(function (d) {
+				btn.disabled = false;
+				if (d && d.paid) { say('✓ ' + (L.pConfirmed || 'Confirmed! Reloading…'), '#15803d'); setTimeout(function () { location.reload(); }, 1200); return; }
+				say((d && d.message) ? d.message : (L.pNotYet || 'Not confirmed yet.'), '#b45309');
+			})
+			.catch(function () { btn.disabled = false; say(L.pUnreachable || 'Could not reach the server.', '#b91c1c'); });
+	});
+})();

@@ -1,0 +1,1012 @@
+# Copyright (C) 2026 SlowBearDigger
+# This file is distributed under the MIT.
+msgid ""
+msgstr ""
+"Project-Id-Version: xmr-pay for WooCommerce 0.1.5-beta\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/xmr-pay-for-woocommerce\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-06-19T19:24:53+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: xmr-pay-for-woocommerce\n"
+
+#. Plugin Name of the plugin
+#: xmr-pay-for-woocommerce.php
+msgid "xmr-pay for WooCommerce"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: xmr-pay-for-woocommerce.php
+msgid "https://github.com/SlowBearDigger/xmr-pay"
+msgstr ""
+
+#. Description of the plugin
+#: xmr-pay-for-woocommerce.php
+msgid "Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. A thin client of your own xmr-pay scanner-agent (no Monero crypto in PHP, no third party)."
+msgstr ""
+
+#. Author of the plugin
+#: xmr-pay-for-woocommerce.php
+msgid "SlowBearDigger"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:24
+msgid "Monero (xmr-pay)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:25
+msgid "Accept Monero, non-custodial. Funds go straight to your address; detection runs on your own xmr-pay agent."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:36
+#: includes/class-wc-gateway-xmrpay.php:78
+#: includes/class-xmrpay-blocks.php:56
+#: includes/class-xmrpay-setup.php:109
+#: includes/class-xmrpay-setup.php:373
+#: xmr-pay-for-woocommerce.php:91
+msgid "Monero (XMR)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:70
+msgid "Enable"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:72
+msgid "Enable Monero payments"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:76
+msgid "Title"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:80
+msgid "What the buyer sees at checkout."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:83
+msgid "Description"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:85
+#: includes/class-xmrpay-setup.php:141
+msgid "Pay privately with Monero. Scan the QR — your wallet fills in the exact amount."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:88
+#: includes/class-xmrpay-setup.php:376
+msgid "Payment box theme"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:92
+#: includes/class-xmrpay-setup.php:378
+msgid "Light (for light store themes)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:93
+#: includes/class-xmrpay-setup.php:379
+msgid "Dark (for dark store themes)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:95
+msgid "Match the QR/payment box to your store theme so it does not look bolted-on."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:98
+msgid "Redirect after payment (URL)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:102
+msgid "Optional. When the payment confirms, send the buyer here (a custom thank-you, a digital-download page, etc.) instead of staying on the order-received page. {order_id} and {order_key} are substituted — {order_key} only for a URL on this same site, so the order token is never leaked to a third-party domain. Leave empty for the default WooCommerce behaviour."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:105
+msgid "How payments are verified"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:109
+msgid "Auto-detect in WordPress — no server (recommended)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:110
+msgid "Buyer taps “I’ve paid” — no server"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:111
+msgid "Auto-detect via your xmr-pay agent (advanced)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:113
+msgid "All three are non-custodial (funds go straight to your address). <strong>Auto-detect in WordPress</strong> needs no backend: WordPress scans the chain itself (with your view key, against a public node) and completes the order — no buyer action, nothing to run 24/7. <strong>Buyer taps “I’ve paid”</strong> is the lightest: the buyer submits the transaction ID and WordPress verifies it (no scanning). <strong>Agent</strong> uses the separate xmr-pay daemon you run. The “No-server settings” below (address, view key, nodes) apply to the two no-server options; the “Agent settings” apply only to Agent mode."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:116
+msgid "No-server settings (Auto-detect & “I’ve paid”)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:118
+msgid "Used by both no-server modes — “Auto-detect in WordPress” and “Buyer taps I’ve paid”. Your private view key stays on your own server (we never hold a spend key — funds go straight to your address). WordPress fetches transactions from a public node and verifies them itself."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:121
+#: includes/class-xmrpay-setup.php:277
+msgid "Your Monero address"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:124
+msgid "Your primary Monero address — buyers pay here. Each order gets a unique amount so payments can’t be confused."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:127
+#: includes/class-xmrpay-setup.php:281
+msgid "Private view key"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:129
+msgid "Your wallet’s PRIVATE VIEW key (not the spend key). View-only: it can see incoming payments but cannot spend. <strong>More private:</strong> instead of storing it here, put <code>define('XMRPAY_VIEW_KEY', '…');</code> in wp-config.php — then it stays out of the database, this screen, and backups. A value here is used only if the constant is not set."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:132
+msgid "Monero node(s)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:135
+msgid "Public node URL(s), comma-separated. Your own node first if you run one. Used only to fetch transactions and the chain height (it never sees your view key)."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:138
+#: includes/class-xmrpay-setup.php:300
+msgid "Confirmations required"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:141
+msgid "0 = accept as soon as it’s seen (fast, mempool); 1 = first block (~2 min); 10 = fully unlocked (safest for high value)."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:145
+msgid "Underpayment tolerance (XMR)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:148
+msgid "Accept a payment that falls short by up to this much (dust/rounding). 0 = exact. It can never reach the price, so a near-zero payment never settles an order."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:151
+#: includes/class-wc-gateway-xmrpay.php:425
+msgid "Check setup"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:155
+msgid "Agent settings (advanced)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:157
+msgid "Used only when the “Agent” mode is selected. The separate xmr-pay daemon you run (see docs/AGENT.md) holds your view key and does the scanning — this plugin only talks HTTP to it. Detection policy (confirmations, tolerance, expiry) is set ON the agent (XMR_MIN_CONFIRMATIONS, XMR_TOLERANCE_XMR, XMR_EXPIRY_HOURS). Leave blank if you use a no-server mode."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:160
+#: includes/class-xmrpay-setup.php:313
+msgid "Agent URL"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:163
+msgid "Base URL of your scanner-agent. Keep it private (localhost or a private network)."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:166
+#: includes/class-xmrpay-setup.php:317
+msgid "Agent token"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:168
+msgid "The AGENT_TOKEN you set on the agent (optional, but recommended)."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:171
+msgid "Connection"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:175
+#: includes/class-xmrpay-setup.php:327
+msgid "Webhook secret"
+msgstr ""
+
+#. translators: %s webhook URL
+#: includes/class-wc-gateway-xmrpay.php:179
+#, php-format
+msgid "Set the agent's FULFILL_WEBHOOK_SECRET to this, and FULFILL_WEBHOOK_URL to: %s"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:184
+#: includes/class-xmrpay-setup.php:243
+msgid "Pricing"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:186
+msgid "How the cart total becomes an XMR amount. Tip: set your store currency to <strong>XMR</strong> to price natively in Monero — then no price feed is used."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:189
+msgid "Price source"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:193
+msgid "CoinGecko (live fiat → XMR)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:194
+msgid "Your own price source (a URL)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:195
+msgid "Fixed rate (set it yourself)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:197
+msgid "How a fiat total converts to XMR (ignored when the store currency is already XMR). For CoinGecko or a custom source, set a <strong>Fixed rate</strong> too and it’s used automatically as a fallback if the live feed is ever unavailable — so checkout never hard-fails."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:200
+msgid "CoinGecko API key"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:202
+msgid "Optional — your own CoinGecko Demo/Pro key, so the price feed is yours and not rate-limited. Leave empty to use the free public endpoint."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:205
+msgid "Custom price URL"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:208
+msgid "Used with “Your own price source”. A URL returning JSON. <code>{currency}</code>/<code>{CURRENCY}</code> are substituted with the store currency code. It should return the price of 1 XMR in your store currency."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:211
+msgid "Rate JSON path"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:214
+msgid "Dot-path to the number in the JSON response, e.g. <code>monero.usd</code> or <code>data.rates.XMR</code>. Leave blank if the response body is the bare number."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:217
+msgid "Fixed rate / fallback"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:220
+msgid "The price of 1 XMR in your store currency. Used as the rate with “Fixed rate”, and as the automatic fallback for the live sources if their feed is down."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:223
+#: includes/class-wc-gateway-xmrpay.php:535
+msgid "Confirmations"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:226
+msgid "Shown to the buyer; the agent enforces its own XMR_MIN_CONFIRMATIONS. Raise both for high-value carts."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:229
+msgid "Test amount (XMR)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:232
+msgid "TEST ONLY — charges this exact XMR amount, ignoring the cart total. It is honoured ONLY when your agent is on stagenet/testnet (run \"Test connection\" first); on mainnet it is ignored, so it can never fix the price on a live store. Leave empty in production."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:235
+msgid "Auto-cancel after (hours)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:238
+msgid "Cancel an unpaid order this many hours after it was placed (frees reserved stock). 0 = never. A late payment to a cancelled order is flagged for you, not auto-completed."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:242
+msgid "Debug log"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:244
+msgid "Log agent calls and webhooks to WooCommerce → Status → Logs (source: xmrpay)"
+msgstr ""
+
+#. translators: 1: received XMR, 2: owed XMR
+#: includes/class-wc-gateway-xmrpay.php:289
+#, php-format
+msgid "Partial Monero payment received (%1$s of %2$s XMR) but the order passed its expiry window — NOT auto-cancelled. The funds are in your wallet; await the buyer's top-up or refund manually."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:297
+msgid "Auto-cancelled: no Monero payment within the expiry window."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:427
+msgid "Checks the node is reachable, the network matches your address, and your view key belongs to the address (uses the values above, even unsaved)."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:435
+msgid "checking…"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:442
+#: includes/class-xmrpay-setup.php:470
+#: includes/class-xmrpay-setup.php:488
+msgid "request failed"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:459
+#: includes/class-xmrpay-setup.php:320
+msgid "Test connection"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:461
+msgid "Pings your agent (the URL/token above, even unsaved) and reports network + view-only status."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:467
+#: includes/class-xmrpay-setup.php:462
+#: includes/class-xmrpay-setup.php:475
+msgid "testing…"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:487
+#: includes/class-wc-gateway-xmrpay.php:584
+#: includes/class-xmrpay-setup.php:100
+msgid "not allowed"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:492
+msgid "set the agent URL first"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:499
+msgid "Agent URL must point to localhost (127.0.0.1 or ::1)."
+msgstr ""
+
+#. translators: %d: HTTP status code
+#: includes/class-wc-gateway-xmrpay.php:511
+#, php-format
+msgid "agent replied HTTP %d"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:533
+msgid "Owed"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:534
+msgid "Received"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:537
+msgid "Monero payment"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:537
+msgid "Address"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:546
+msgid "Overpaid"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:546
+msgid "refund the difference to the buyer."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:573
+msgid "The selected Monero mode verifies payments in PHP and needs the GMP extension, which is not installed. The Monero gateway is hidden until your host enables ext-gmp (or switch to Agent mode)."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:587
+msgid "PHP is missing the GMP extension — ask your host to enable ext-gmp (or use Agent mode)."
+msgstr ""
+
+#. translators: 1: network name, 2: block height
+#: includes/class-wc-gateway-xmrpay.php:609
+#, php-format
+msgid "Node reachable — %1$s, block %2$s."
+msgstr ""
+
+#. translators: 1: the address's network, 2: the node's network
+#: includes/class-wc-gateway-xmrpay.php:613
+#, php-format
+msgid "Network mismatch: your address is %1$s but the node is %2$s."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:617
+msgid "Node unreachable — check the URL and port."
+msgstr ""
+
+#. translators: %s: network name
+#: includes/class-wc-gateway-xmrpay.php:623
+#, php-format
+msgid "Address is valid (%s)."
+msgstr ""
+
+#. translators: %s: network name
+#: includes/class-wc-gateway-xmrpay.php:623
+msgid "Address could not be decoded — check it."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:628
+msgid "View key belongs to this address."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:628
+msgid "View key does NOT match this address — detection would find nothing. Re-check the key."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:631
+msgid "No view key set yet."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:712
+msgid "Could not get an XMR price. Check your pricing settings."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:727
+msgid "Set a fixed XMR rate in the payment settings."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:737
+msgid "Could not get an XMR price and no fixed-rate fallback is set."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:753
+msgid "No custom price-source URL is set."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:763
+msgid "The custom price source did not return a valid rate at that path."
+msgstr ""
+
+#. translators: %s: currency code
+#: includes/class-wc-gateway-xmrpay.php:805
+#, php-format
+msgid "No XMR price for %s."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:842
+msgid "Could not compute a valid XMR amount. Check your rate settings."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:846
+msgid "Order total is 0 — no Monero payment required."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:859
+msgid "Monero is not fully configured. Please contact us."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:866
+msgid "Could not start the Monero payment. Please contact us."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:885
+#: includes/class-wc-gateway-xmrpay.php:904
+msgid "Awaiting Monero payment."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:893
+msgid "Could not start the Monero payment. Try again or contact us."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:988
+msgid "Pay with Monero"
+msgstr ""
+
+#. translators: %s: order number
+#: includes/class-wc-gateway-xmrpay.php:991
+#, php-format
+msgid "This order (#%s) has expired. If you already sent a Monero payment, don't worry — your funds are safe in our wallet. Please contact us with your order number and we will complete it or refund you."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:996
+msgid "✓ Payment received"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:996
+msgid "● Awaiting payment…"
+msgstr ""
+
+#. translators: %s: amount overpaid in XMR
+#: includes/class-wc-gateway-xmrpay.php:1000
+#, php-format
+msgid "You overpaid %s XMR. Please contact the store to arrange a refund of the difference."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1010
+msgid "Already paid? Paste your transaction ID and we’ll confirm it."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1012
+msgid "Transaction ID (64 hex characters)"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1016
+msgid "I’ve paid — verify"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1028
+msgid "That doesn’t look like a transaction ID (need 64 hex characters)."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1029
+msgid "Checking the blockchain…"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1033
+msgid "Payment confirmed! Reloading…"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1034
+msgid "Not confirmed yet. If you just paid, wait a minute and try again."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1036
+msgid "Could not reach the server. Try again."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1070
+msgid "Your cryptographic receipt"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1072
+msgid "Signed by the merchant. Download it and verify it yourself — anyone can, forever, with no third party."
+msgstr ""
+
+#. translators: %s: signer fingerprint
+#: includes/class-wc-gateway-xmrpay.php:1073
+#, php-format
+msgid "Signer: %s"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1076
+msgid "Download receipt"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1078
+msgid "Verify receipt"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1154
+msgid "Order not found."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1160
+msgid "This order can no longer be paid. If you already sent funds, contact us — they are safe."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1163
+msgid "That doesn’t look like a transaction ID."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1168
+msgid "Please wait a few seconds and try again."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1179
+msgid "That transaction is being processed — try again in a moment."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1184
+msgid "That transaction has already been used for another order."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1191
+msgid "Payment is not fully configured. Contact the store."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1200
+msgid "No payment to your order was found in that transaction. Check the transaction ID."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1203
+msgid "That transaction did not verify. Contact the store."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1213
+#: includes/class-wc-gateway-xmrpay.php:1218
+msgid "Payment seen — waiting for confirmation. This page will update shortly."
+msgstr ""
+
+#. translators: %s: amount still owed in XMR
+#: includes/class-wc-gateway-xmrpay.php:1220
+#, php-format
+msgid "The amount is short by %s XMR. Please send the difference."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1221
+msgid "The payment is time-locked and not spendable yet. Try again later."
+msgstr ""
+
+#. translators: %s order status
+#: includes/class-wc-gateway-xmrpay.php:1310
+#, php-format
+msgid "Monero payment arrived for a %s order — NOT auto-completed. The funds are in your wallet; reconcile manually."
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1349
+msgid "Monero payment confirmed by the xmr-pay agent."
+msgstr ""
+
+#. translators: 1: amount of XMR received, 2: amount of XMR owed
+#: includes/class-wc-gateway-xmrpay.php:1351
+#, php-format
+msgid "Received: %1$s XMR (owed %2$s)."
+msgstr ""
+
+#. translators: %d: number of confirmations
+#: includes/class-wc-gateway-xmrpay.php:1353
+#, php-format
+msgid "Confirmations: %d."
+msgstr ""
+
+#. translators: %s: transaction hash(es)
+#: includes/class-wc-gateway-xmrpay.php:1355
+#, php-format
+msgid "tx: %s"
+msgstr ""
+
+#. translators: %s: amount overpaid in XMR
+#: includes/class-wc-gateway-xmrpay.php:1357
+#, php-format
+msgid "OVERPAID by %s XMR — the buyer was asked to contact you; refund the difference manually."
+msgstr ""
+
+#. translators: %s refund amount with currency symbol
+#: includes/class-wc-gateway-xmrpay.php:1382
+#, php-format
+msgid "Monero is non-custodial — this %s refund is recorded in WooCommerce only. Send the XMR back manually: ask the customer for a Monero receive address (a tx does not reveal the sender), then pay it from your wallet."
+msgstr ""
+
+#. translators: 1: amount of XMR, 2: Monero address
+#: includes/class-wc-gateway-xmrpay.php:1408
+#, php-format
+msgid "Pay %1$s XMR to: %2$s"
+msgstr ""
+
+#. translators: %s: payment page URL
+#: includes/class-wc-gateway-xmrpay.php:1410
+#, php-format
+msgid "Payment page (QR + live status): %s"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1414
+msgid "Complete your Monero payment"
+msgstr ""
+
+#. translators: %s: amount of XMR (bold)
+#: includes/class-wc-gateway-xmrpay.php:1416
+#, php-format
+msgid "Send %s XMR to:"
+msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php:1418
+msgid "Open the payment page (QR + live status) →"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:44
+msgid "Monero payments — Setup"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:45
+msgid "Monero setup"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:55
+msgid "Setup wizard"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:92
+msgid "Monero payments"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:93
+msgid "finish setup to start accepting XMR."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:94
+msgid "Run the setup wizard"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:158
+msgid "You do not have permission to do this."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:235
+msgid "Accept Monero — setup"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:236
+msgid "Non-custodial. Funds go straight to your wallet — no third party, ever."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:241
+msgid "Start"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:242
+msgid "Connect"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:244
+msgid "Go live"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:251
+msgid "Non-custodial Monero — pick how to verify"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:252
+msgid "Funds go straight to your own wallet; no third party ever touches them. Choose how payments are confirmed — the two no-server options need nothing running 24/7."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:255
+msgid "Auto-detect in WordPress (recommended)"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:256
+msgid "No server, no buyer action. WordPress scans the chain itself (with your view key, via a public node) and completes the order. Needs the PHP GMP extension."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:260
+msgid "Buyer taps “I’ve paid”"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:261
+msgid "The lightest. The buyer pastes their transaction ID and WordPress verifies it — no scanning, no agent."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:265
+msgid "Run the xmr-pay agent (advanced)"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:266
+msgid "Auto-detect via the separate xmr-pay daemon you run (npx xmr-pay); the agent holds the view key."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:274
+msgid "Your wallet"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:275
+msgid "WordPress verifies payments itself with your VIEW key (view-only — it can see payments, never spend). Nothing runs 24/7."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:281
+msgid "view-only — never your spend key or seed"
+msgstr ""
+
+#. translators: %s: the XMRPAY_VIEW_KEY constant name
+#: includes/class-xmrpay-setup.php:285
+#, php-format
+msgid "Loaded from the %s constant in wp-config.php — nothing to enter here."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:288
+msgid "64 hex characters"
+msgstr ""
+
+#. translators: %s: a PHP define() snippet
+#: includes/class-xmrpay-setup.php:291
+#, php-format
+msgid "More private: put %s in wp-config.php so it never touches the database."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:296
+msgid "Monero node URL(s)"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:296
+msgid "comma-separated; a public one is fine"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:302
+msgid "0 = instant (mempool, riskier) · 1 = first block (~2 min) · 10 = fully unlocked (high value)."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:304
+msgid "Test setup"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:305
+msgid "checks the node, network, and that your view key matches the address"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:310
+msgid "Connect your agent"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:311
+msgid "Run npx xmr-pay on a machine you control; it prints an Agent URL, a token, and a webhook secret. Paste them here."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:313
+msgid "keep it private — localhost or a private network"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:318
+msgid "the AGENT_TOKEN from your agent"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:323
+msgid "Set the agent's FULFILL_WEBHOOK_URL to:"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:324
+msgid "Copy"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:327
+msgid "the FULFILL_WEBHOOK_SECRET from your agent"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:335
+msgid "How prices become XMR"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:337
+msgid "Your store currency is already XMR — prices are native Monero and no price feed is used. Nothing to choose here."
+msgstr ""
+
+#. translators: 1: store currency code, 2: currency settings link open, 3: link close
+#: includes/class-xmrpay-setup.php:342
+#, php-format
+msgid "Your store prices in %1$s, so the total is converted to XMR at checkout. Or price natively in Monero by setting your %2$sstore currency to XMR%3$s (no feed needed)."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:350
+msgid "CoinGecko — live rate"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:351
+msgid "Convert the fiat total to XMR at the current market price. Recommended for most stores."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:353
+msgid "CoinGecko API key (optional)"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:358
+msgid "Fixed rate — you set it"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:359
+msgid "Pin the price of 1 XMR in your store currency. No external feed."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:361
+msgid "price of 1 XMR, e.g. 150"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:369
+msgid "How it looks at checkout"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:370
+msgid "Last bit. Name the method and match the payment box to your store theme. You can fine-tune everything later in the full settings."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:372
+msgid "Title at checkout"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:382
+msgid "Clicking “Finish” enables Monero at checkout with everything you set here."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:389
+msgid "Monero is live"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:390
+msgid "Your store now accepts XMR, non-custodially. Place a test order to watch the live on-chain stepper, or open the full settings to tune confirmations, order expiry and more."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:392
+msgid "Visit your shop"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:393
+msgid "Full settings"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:401
+msgid "← Back"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:403
+msgid "Skip — I'll use the full settings"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:404
+#: includes/class-xmrpay-setup.php:437
+msgid "Next →"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:437
+#: includes/class-xmrpay-setup.php:549
+#: includes/class-xmrpay-setup.php:553
+msgid "Finish ✓"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:461
+msgid "enter the Agent URL first"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:503
+msgid "Copied"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:529
+msgid "Saving…"
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:550
+msgid "Could not save. Try again."
+msgstr ""
+
+#: includes/class-xmrpay-setup.php:553
+msgid "Request failed."
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:31
+msgid "Every 5 minutes (xmr-pay)"
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:73
+msgid "xmr-pay for WooCommerce needs WooCommerce active."
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:116
+msgid "Watching"
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:117
+msgid "Detected"
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:118
+msgid "Confirming"
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:119
+msgid "Confirmed"
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:120
+msgid "Payment confirmed"
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:121
+msgid "Watching the blockchain for your payment…"
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:122
+msgid "Payment detected — waiting for the first confirmation."
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:123
+msgid "Confirming — {c}/{m} confirmations."
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:124
+msgid "Received {r} XMR — send {s} more (QR updated to the exact amount)."
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:125
+msgid "Funds received — maturing on-chain…"
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:126
+msgid "Connecting to the payment scanner…"
+msgstr ""
+
+#: xmr-pay-for-woocommerce.php:127
+msgid "Latest block"
+msgstr ""

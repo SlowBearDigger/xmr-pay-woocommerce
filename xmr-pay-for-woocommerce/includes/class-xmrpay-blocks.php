@@ -21,8 +21,23 @@ final class XmrPay_Blocks_Support extends AbstractPaymentMethodType {
 	}
 
 	public function is_active() {
-		return ! empty( $this->settings['enabled'] ) && 'yes' === $this->settings['enabled']
-			&& '' !== trim( (string) ( isset( $this->settings['agent_url'] ) ? $this->settings['agent_url'] : '' ) );
+		if ( empty( $this->settings['enabled'] ) || 'yes' !== $this->settings['enabled'] ) {
+			return false;
+		}
+		// MUST mirror WC_Gateway_XmrPay::is_available() so the gateway shows at the Blocks
+		// (React) checkout in EVERY mode — not just agent mode. The default/recommended
+		// modes are the no-server ones (watch/proof), which use address + view key, NOT
+		// agent_url; checking only agent_url here would hide a correctly-configured store.
+		$mode = isset( $this->settings['mode'] ) ? $this->settings['mode'] : 'watch';
+		if ( 'agent' === $mode ) {
+			return '' !== trim( (string) ( isset( $this->settings['agent_url'] ) ? $this->settings['agent_url'] : '' ) );
+		}
+		// no-server modes: address + view key (constant or setting) + GMP (the verifier needs it).
+		$has_view = ( defined( 'XMRPAY_VIEW_KEY' ) && '' !== trim( (string) XMRPAY_VIEW_KEY ) )
+			|| '' !== trim( (string) ( isset( $this->settings['view_key'] ) ? $this->settings['view_key'] : '' ) );
+		return '' !== trim( (string) ( isset( $this->settings['xmr_address'] ) ? $this->settings['xmr_address'] : '' ) )
+			&& $has_view
+			&& extension_loaded( 'gmp' );
 	}
 
 	public function get_payment_method_script_handles() {

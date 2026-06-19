@@ -125,6 +125,12 @@ function xmrpay_wc_init() {
 			'mLocked'    => __( 'Funds received — maturing on-chain…', 'xmr-pay-for-woocommerce' ),
 			'mConnecting'=> __( 'Connecting to the payment scanner…', 'xmr-pay-for-woocommerce' ),
 			'block'      => __( 'Latest block', 'xmr-pay-for-woocommerce' ),
+			// proof mode "I've paid" txid form (assets/checkout.js)
+			'pBadTxid'    => __( 'That doesn’t look like a transaction ID (need 64 hex characters).', 'xmr-pay-for-woocommerce' ),
+			'pChecking'   => __( 'Checking the blockchain…', 'xmr-pay-for-woocommerce' ),
+			'pConfirmed'  => __( 'Payment confirmed! Reloading…', 'xmr-pay-for-woocommerce' ),
+			'pNotYet'     => __( 'Not confirmed yet. If you just paid, wait a minute and try again.', 'xmr-pay-for-woocommerce' ),
+			'pUnreachable'=> __( 'Could not reach the server. Try again.', 'xmr-pay-for-woocommerce' ),
 		) );
 	} );
 
