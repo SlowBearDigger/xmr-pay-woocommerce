@@ -4,7 +4,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.1.5-beta
+Stable tag: 0.1.6-beta
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -82,6 +82,15 @@ This plugin does **not** track you or your customers, sends **no** analytics, an
 Your Monero **private view key** (used by the no-server modes) stays on your own server — it is never sent to any external service, including the node.
 
 == Changelog ==
+
+= 0.1.6 (beta) =
+* **No-server modes — accept Monero with no external agent.** The plugin can now verify payments in **pure PHP** (vendored Monero crypto: ed25519, Keccak, base58), in two new modes: **Auto-detect** (a view-only watch over your address + node) and **"I've paid"** (the buyer pastes a transaction ID, verified on-chain). The advanced **Agent** mode is still there. The no-server modes need the **GMP** PHP extension (most hosts have it, or can enable it).
+* **Mode-aware setup wizard** with a live **"Check setup"** — confirms the node is reachable, the network matches your address, and your **view key actually belongs to the address** before you go live.
+* **Pricing your way.** Fixed-rate fallback when a feed is down, and you can point at **your own price-source URL** (JSON) instead of CoinGecko. The custom URL is fetched with SSRF protection.
+* **Fix:** the setup wizard (and the post-activation redirect) could return *"Sorry, you are not allowed to access this page."* — the hidden admin page is now registered so direct access works.
+* **Fix:** the **"Check setup" / "Test connection"** buttons returned HTTP 400 — their admin-ajax handlers are now registered correctly.
+* **WordPress.org readiness:** all inline scripts moved into enqueued asset files, ABSPATH guards on bundled files, translation template (.pot), and an **"External services"** privacy disclosure in the readme.
+* Refreshed the bundled checkout widget to the latest build.
 
 = 0.1.5 (beta) =
 * Pairs with the **xmr-pay 0.4.0-beta** agent (payment-correctness + reliability release). No store reconfiguration needed.
