@@ -1,70 +1,92 @@
 # xmr-pay for WooCommerce
 
-A WooCommerce payment gateway that accepts **Monero (XMR)** — non-custodial,
-funds go straight to the merchant's own address. The plugin is a **thin HTTP
-client** of the merchant's own [xmr-pay scanner-agent](https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/AGENT.md):
-no Monero crypto in PHP, no third party, no view key in WordPress.
+Accept **Monero (XMR)** on WooCommerce — **non-custodial** (funds go straight to your own
+address) and with **no backend you have to run**. WordPress verifies payments **itself**,
+in PHP, against a public Monero node. No third party, no account, no fees from us.
+
+> Requires **PHP 7.4+** (with the **GMP** extension for the no-server modes), **WordPress
+> 6.2+**, **WooCommerce 7.0+**. HPOS-compatible. License **MIT**.
+
+## How it verifies — pick a mode
+
+| Mode | Buyer does | Needs a view key? | Runs a daemon? |
+|---|---|---|---|
+| **Auto-detect in WordPress** (recommended) | nothing | yes (on your server) | **no** |
+| **Buyer taps "I've paid"** | pastes the transaction ID | yes (on your server) | **no** |
+| **Agent** (advanced) | nothing | no (the agent holds it) | **yes** (`npx xmr-pay`) |
+
+The two **no-server** modes do the Monero crypto in pure PHP (vendored, audited — no
+Composer, no Node, no `monero-wallet-rpc`). The only external thing they need is a
+**Monero node** (a public one is fine) to read the chain — your view key never leaves
+your server. **Agent** mode is for merchants who'd rather run the separate
+[xmr-pay daemon](https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/AGENT.md).
 
 ```
-WooCommerce (this plugin, PHP)         the merchant's box (private)
-  checkout ─▶ process_payment() ─POST /order─▶  scanner-agent (Node + monero-ts)
-  pay page ◀─ subaddress + QR (<xmr-pay> widget)      │ view key, scan, sum
-  buyer pays ───────────────────────────────────────▶ monerod
-  agent ─signed order.paid webhook─▶ this plugin ─▶ order marked paid
+Auto-detect / "I've paid":           Agent (advanced):
+ checkout ─▶ order (your address)     checkout ─▶ POST /order ─▶ agent (Node + view key)
+ buyer pays ─────────▶ monerod        buyer pays ───────────────▶ monerod
+ WordPress scans/verifies (PHP) ─▶    agent ─signed webhook─▶ plugin ─▶ paid
+   order marked paid
 ```
 
-The buyer's browser polls **this plugin** (which proxies the agent server-side),
-so the agent stays private. Completion is authoritative via the signed webhook.
+The buyer's browser only ever shows status — **fulfillment happens server-side**; a faked
+"paid" in the browser fools nothing.
 
-## The plugin
+## Quick start
 
-`xmr-pay-for-woocommerce/` — drop it in `wp-content/plugins/` (or install the zip).
+1. Install & activate the plugin (drop `xmr-pay-for-woocommerce/` in `wp-content/plugins/`,
+   or upload the zip). A guided setup wizard helps on first run.
+2. **WooCommerce → Settings → Payments → Monero (xmr-pay)**.
+3. Pick a **mode** (Auto-detect is recommended).
+4. For the no-server modes, fill in:
+   - **Your Monero address**
+   - **Private view key** — view-only (cannot spend). Better: put
+     `define( 'XMRPAY_VIEW_KEY', '…' );` in `wp-config.php` so it stays out of the database.
+   - **Node(s)** — a public Monero node URL (your own first, if you run one).
+   - **Confirmations** — `1` is a good default; `0` = instant (riskier).
+5. Test on **stagenet** first, then switch to your mainnet wallet.
 
-**Settings (WooCommerce → Payments → Monero):**
-- **Agent URL** — your scanner-agent (`http://127.0.0.1:8788` by default; keep it private).
-- **Agent token** — the agent's `AGENT_TOKEN`.
-- **Webhook secret** — set the agent's `FULFILL_WEBHOOK_SECRET` to this, and its
-  `FULFILL_WEBHOOK_URL` to the URL shown in the settings.
-- **Test amount (XMR)** — TEST ONLY: charge a fixed XMR amount (e.g. `0.01`) so you
-  can exercise the flow on stagenet without a price feed. Leave empty in production
-  (then the cart's fiat total is converted via CoinGecko).
+## Settings (the two no-server modes)
+Address, view key, node(s), confirmations, and an optional underpayment tolerance — that's
+it. (The "Agent settings" section applies only to **Agent** mode; leave it blank otherwise.)
+
+## What it stores / what it touches
+**No custom database tables.** Settings live in one option row, per-order data in order
+meta, short-lived caches in transients, two idempotent WP-Cron jobs. Outbound: a Monero
+node (+ CoinGecko only if you price in fiat). Full map:
+[`docs/DATA-AND-FOOTPRINT.md`](xmr-pay-for-woocommerce/docs/DATA-AND-FOOTPRINT.md).
+
+## Docs
+- **FAQ & guide** (plain-language + technical): [`xmr-pay/docs/FAQ.md`](https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/FAQ.md)
+- **Data & footprint**: [`docs/DATA-AND-FOOTPRINT.md`](xmr-pay-for-woocommerce/docs/DATA-AND-FOOTPRINT.md)
+- **How WordPress-native verification works**: [`docs/WP-NATIVE-VERIFICATION.md`](docs/WP-NATIVE-VERIFICATION.md)
+- **Agent mode**: [xmr-pay/docs/AGENT.md](https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/AGENT.md)
 
 ## Local dev / test (no Docker)
-
-Needs Node + PHP (PHP is used by `wp-now`; SQLite, no MySQL).
-
-**1. WordPress + WooCommerce + this plugin** (auto-configured by `blueprint.json`):
+Needs Node + PHP (`wp-now` uses SQLite, no MySQL). Boot WordPress + WooCommerce + this
+plugin via the included blueprint:
 
 ```bash
 cd xmr-pay-for-woocommerce
 npx @wp-now/wp-now start --blueprint=../blueprint.json --port=8881
-# → http://localhost:8881  (wp-admin auto-login; a "Test Item" product; gateway preconfigured)
+# → http://localhost:8881  (auto-login; a test product; gateway preconfigured)
 ```
 
-**2. The scanner-agent on stagenet** (view-only, reuses the lib's POC keys):
+Then set a **no-server** mode with a stagenet address + view key + a stagenet node, place
+an order, pay the shown address on stagenet (a faucet or self-send), and watch it complete.
+(For agent-mode dev, run `examples/scanner-agent.js` from the `xmr-pay` lib and point the
+plugin's Agent URL at it.)
 
+The pure-PHP verifier has its own offline + on-chain tests:
 ```bash
-cd ../../goxmr-pay-lib            # the xmr-pay lib
-XMR_PRIMARY_ADDRESS=<poc stagenet primary> \
-XMR_VIEW_KEY=<poc stagenet view key> \
-XMR_NETWORK=stagenet \
-XMR_NODES=http://node.monerodevs.org:38089 \
-XMR_RESTORE_HEIGHT=<recent height> \
-FULFILL_WEBHOOK_URL='http://localhost:8881/?wc-api=xmrpay_webhook' \
-FULFILL_WEBHOOK_SECRET=whsec_test_xmrpay \
-PORT=8788 \
-NODE_PATH=$HOME/Documents/goxmr-landing/server/node_modules \
-node examples/scanner-agent.js
+php tests/util.test.php        # money math (no network)
+php tests/scanner.test.php     # on-chain verification vs a public stagenet node
 ```
-
-**3. Place an order** in the store, pay the shown subaddress on stagenet (faucet
-or a self-send), and watch the order flip to paid (poll + webhook).
 
 ## Status
-
-MVP: classic checkout gateway, per-order subaddress via the agent, QR via the
-bundled `<xmr-pay>` widget, server-side status proxy, signed webhook completion,
-HPOS-compatible. Next: WooCommerce **Blocks** checkout integration, an onboarding
-wizard, and a one-click agent deploy.
+Classic **and** Blocks (Store API) checkout, the three modes above, per-order
+subaddresses, QR via the bundled `<xmr-pay>` widget, signed receipts, HPOS-compatible,
+guided setup wizard. Beta — heading to a 1.0 after a mainnet smoke test and an independent
+audit of the verification path.
 
 A [GoXMR](https://goxmr.click) project · MIT.

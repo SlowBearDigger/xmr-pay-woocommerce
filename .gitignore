@@ -3,3 +3,6 @@
 *.sha256
 node_modules/
 *.log
+
+# Playground sandbox artifact (tracked on purpose for the raw-URL blueprint)
+!playground/*.zip

@@ -1,16 +1,16 @@
 <?php
 /**
- * Guided setup wizard — the store-side half of the `npx xmr-pay` handshake.
+ * Guided setup wizard — mode-aware onboarding, leading with the no-server default.
  *
- * The agent (`npx xmr-pay`) prints three values when it boots: an Agent URL, an
- * Agent token, and a Webhook secret. This wizard is where they land. Instead of
- * the merchant hunting through the gateway's full settings form, it walks them
- * through exactly four things — connect the agent (with a LIVE connection test),
- * wire the webhook, pick how prices convert, and go live — mirroring the npm
- * agent's one-command flow so both halves feel like one product.
+ * Four steps: (0) pick how to verify — Auto-detect in WordPress (recommended,
+ * no server), "Buyer taps I've paid", or the advanced Agent mode; (1) Connect —
+ * for the no-server modes, your address / view key / node with a LIVE "Test setup"
+ * check (node reachable, network, and that the view key matches the address); for
+ * Agent mode, the Agent URL / token / webhook with a live connection test;
+ * (2) pricing; (3) go live.
  *
- * It writes straight into the gateway's own settings option, so everything stays
- * editable afterwards in WooCommerce → Settings → Payments → Monero.
+ * It writes straight into the gateway's own settings option (incl. `mode`), so
+ * everything stays editable afterwards in WooCommerce → Settings → Payments → Monero.
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
@@ -26,6 +26,7 @@ class XmrPay_Setup {
 		add_action( 'admin_init', array( $this, 'maybe_redirect_on_activate' ) );
 		add_action( 'admin_notices', array( $this, 'setup_notice' ) );
 		add_action( 'wp_ajax_xmrpay_setup_save', array( $this, 'ajax_save' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
 		// a "Run setup wizard" shortcut from the plugins list row.
 		add_filter( 'plugin_action_links_' . plugin_basename( XMRPAY_WC_FILE ), array( $this, 'plugin_links' ) );
 	}
@@ -79,8 +80,12 @@ class XmrPay_Setup {
 		if ( $screen && $screen->id === 'woocommerce_page_' . self::PAGE ) {
 			return; // already on the wizard
 		}
-		$cfg = get_option( self::OPTION, array() );
-		$configured = is_array( $cfg ) && 'yes' === ( isset( $cfg['enabled'] ) ? $cfg['enabled'] : 'no' ) && ! empty( $cfg['agent_url'] );
+		$cfg  = get_option( self::OPTION, array() );
+		$cfg  = is_array( $cfg ) ? $cfg : array();
+		$on   = 'yes' === ( isset( $cfg['enabled'] ) ? $cfg['enabled'] : 'no' );
+		$mode = isset( $cfg['mode'] ) ? $cfg['mode'] : 'watch';
+		$has_view = ( defined( 'XMRPAY_VIEW_KEY' ) && '' !== trim( (string) XMRPAY_VIEW_KEY ) ) || ! empty( $cfg['view_key'] );
+		$configured = $on && ( 'agent' === $mode ? ! empty( $cfg['agent_url'] ) : ( ! empty( $cfg['xmr_address'] ) && $has_view ) );
 		if ( $configured ) {
 			return;
 		}
@@ -104,9 +109,24 @@ class XmrPay_Setup {
 		$cfg['enabled']        = 'yes';
 		$cfg['title']          = $text( 'title' ) !== '' ? $text( 'title' ) : __( 'Monero (XMR)', 'xmr-pay-for-woocommerce' );
 		$cfg['checkout_theme'] = in_array( $text( 'checkout_theme' ), array( 'light', 'dark' ), true ) ? $text( 'checkout_theme' ) : 'light';
-		$cfg['agent_url']      = esc_url_raw( isset( $in['agent_url'] ) ? trim( $in['agent_url'] ) : '' );
-		$cfg['agent_token']    = $text( 'agent_token' );
-		$cfg['webhook_secret'] = $text( 'webhook_secret' );
+
+		// the mode the merchant chose (default = the no-server auto-detect).
+		$mode          = in_array( $text( 'mode' ), array( 'watch', 'proof', 'agent' ), true ) ? $text( 'mode' ) : 'watch';
+		$cfg['mode']   = $mode;
+		if ( 'agent' === $mode ) {
+			$cfg['agent_url']      = esc_url_raw( isset( $in['agent_url'] ) ? trim( $in['agent_url'] ) : '' );
+			$cfg['agent_token']    = $text( 'agent_token' );
+			$cfg['webhook_secret'] = $text( 'webhook_secret' );
+		} else {
+			// no-server modes: address + view key + node(s) live in WordPress.
+			$cfg['xmr_address'] = $text( 'xmr_address' );
+			// only overwrite the stored view key if one was entered (a wp-config
+			// constant or a previously-saved value should not be blanked).
+			$vk = $text( 'view_key' );
+			if ( '' !== $vk ) { $cfg['view_key'] = $vk; }
+			$cfg['nodes']          = $text( 'nodes' ) !== '' ? $text( 'nodes' ) : 'http://node2.monerodevs.org:38089';
+			$cfg['proof_min_conf'] = is_numeric( $text( 'proof_min_conf' ) ) ? (string) max( 0, (int) $text( 'proof_min_conf' ) ) : '1';
+		}
 
 		$src = in_array( $text( 'price_source' ), array( 'coingecko', 'fixed' ), true ) ? $text( 'price_source' ) : 'coingecko';
 		$cfg['price_source'] = $src;
@@ -130,6 +150,32 @@ class XmrPay_Setup {
 		) );
 	}
 
+	/** Enqueue the wizard JS + localised data on the setup page only. */
+	public function enqueue( $hook ) {
+		if ( 'woocommerce_page_' . self::PAGE !== $hook ) {
+			return;
+		}
+		wp_enqueue_script( 'xmrpay-wizard', plugins_url( 'assets/wizard.js', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION, true );
+		wp_localize_script( 'xmrpay-wizard', 'xmrpayWizard', array(
+			'ajaxurl'   => admin_url( 'admin-ajax.php' ),
+			'testNonce' => wp_create_nonce( 'xmrpay_test_agent' ),
+			'nodeNonce' => wp_create_nonce( 'xmrpay_test_node' ),
+			'saveNonce' => wp_create_nonce( 'xmrpay_setup_save' ),
+			'hasConst'  => defined( 'XMRPAY_VIEW_KEY' ) && '' !== trim( (string) XMRPAY_VIEW_KEY ),
+			'i18n'      => array(
+				'finish'        => __( 'Finish ✓', 'xmr-pay-for-woocommerce' ),
+				'next'          => __( 'Next →', 'xmr-pay-for-woocommerce' ),
+				'testing'       => __( 'testing…', 'xmr-pay-for-woocommerce' ),
+				'enterUrl'      => __( 'enter the Agent URL first', 'xmr-pay-for-woocommerce' ),
+				'reqfail'       => __( 'request failed', 'xmr-pay-for-woocommerce' ),
+				'copied'        => __( 'Copied', 'xmr-pay-for-woocommerce' ),
+				'saving'        => __( 'Saving…', 'xmr-pay-for-woocommerce' ),
+				'couldNotSave'  => __( 'Could not save. Try again.', 'xmr-pay-for-woocommerce' ),
+				'requestFailed' => __( 'Request failed.', 'xmr-pay-for-woocommerce' ),
+			),
+		) );
+	}
+
 	private function webhook_url() {
 		return function_exists( 'WC' ) && WC() ? WC()->api_request_url( 'xmrpay_webhook' ) : home_url( '/?wc-api=xmrpay_webhook' );
 	}
@@ -142,10 +188,11 @@ class XmrPay_Setup {
 		$cfg          = is_array( $cfg ) ? $cfg : array();
 		$g            = static function ( $k, $d = '' ) use ( $cfg ) { return isset( $cfg[ $k ] ) && $cfg[ $k ] !== '' ? $cfg[ $k ] : $d; };
 		$webhook_url  = $this->webhook_url();
+		$has_const    = defined( 'XMRPAY_VIEW_KEY' ) && '' !== trim( (string) XMRPAY_VIEW_KEY );
+		$cur_mode     = in_array( $g( 'mode', 'watch' ), array( 'watch', 'proof', 'agent' ), true ) ? $g( 'mode', 'watch' ) : 'watch';
 		$is_xmr_store = function_exists( 'get_woocommerce_currency' ) && get_woocommerce_currency() === 'XMR';
 		$store_cur    = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD';
-		$test_nonce   = wp_create_nonce( 'xmrpay_test_agent' );
-		$save_nonce   = wp_create_nonce( 'xmrpay_setup_save' );
+		// nonces + the wizard's JS are enqueued/localised in enqueue() (assets/wizard.js).
 		$cur_url      = admin_url( 'admin.php?page=wc-settings&tab=general' );
 		$full_url     = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=xmrpay' );
 		?>
@@ -217,66 +264,99 @@ class XmrPay_Setup {
 
 				<div class="xp-steps" id="xp-steps">
 					<div class="s active" data-dot="0"><?php esc_html_e( 'Start', 'xmr-pay-for-woocommerce' ); ?></div>
-					<div class="s" data-dot="1"><?php esc_html_e( 'Agent', 'xmr-pay-for-woocommerce' ); ?></div>
-					<div class="s" data-dot="2"><?php esc_html_e( 'Webhook', 'xmr-pay-for-woocommerce' ); ?></div>
-					<div class="s" data-dot="3"><?php esc_html_e( 'Pricing', 'xmr-pay-for-woocommerce' ); ?></div>
-					<div class="s" data-dot="4"><?php esc_html_e( 'Go live', 'xmr-pay-for-woocommerce' ); ?></div>
+					<div class="s" data-dot="1"><?php esc_html_e( 'Connect', 'xmr-pay-for-woocommerce' ); ?></div>
+					<div class="s" data-dot="2"><?php esc_html_e( 'Pricing', 'xmr-pay-for-woocommerce' ); ?></div>
+					<div class="s" data-dot="3"><?php esc_html_e( 'Go live', 'xmr-pay-for-woocommerce' ); ?></div>
 				</div>
 
 				<div class="xp-body">
 
-					<!-- 0 — welcome -->
+					<!-- 0 — start + mode -->
 					<section class="xp-step show" data-step="0">
-						<h2><?php esc_html_e( 'Two pieces, one product', 'xmr-pay-for-woocommerce' ); ?></h2>
-						<p class="lead"><?php esc_html_e( 'This plugin is a thin client of your own payment agent. The agent holds only your VIEW key — it can see payments, never spend them. Funds land straight in your wallet; nothing private ever touches this site.', 'xmr-pay-for-woocommerce' ); ?></p>
-						<div class="xp-note info">
-							<strong><?php esc_html_e( 'Before you continue:', 'xmr-pay-for-woocommerce' ); ?></strong>
-							<?php esc_html_e( 'run your agent on a machine you control. One command:', 'xmr-pay-for-woocommerce' ); ?>
-							<br><span class="xp-mono">npx xmr-pay</span>
-							<br><?php esc_html_e( 'It runs a short wizard, then prints three values — an Agent URL, an Agent token, and a Webhook secret. Keep them handy; you will paste them here.', 'xmr-pay-for-woocommerce' ); ?>
-						</div>
-						<p class="lead"><?php
-							printf(
-								/* translators: %s docs link */
-								esc_html__( 'No agent yet? See the agent guide: %s', 'xmr-pay-for-woocommerce' ),
-								'<a href="https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/AGENT.md" target="_blank" rel="noopener">docs/AGENT.md</a>'
-							);
-						?></p>
+						<h2><?php esc_html_e( 'Non-custodial Monero — pick how to verify', 'xmr-pay-for-woocommerce' ); ?></h2>
+						<p class="lead"><?php esc_html_e( 'Funds go straight to your own wallet; no third party ever touches them. Choose how payments are confirmed — the two no-server options need nothing running 24/7.', 'xmr-pay-for-woocommerce' ); ?></p>
+						<label class="xp-radio sel" data-mode="watch">
+							<input type="radio" name="xp-mode" value="watch"<?php checked( $cur_mode, 'watch' ); ?>>
+							<b><?php esc_html_e( 'Auto-detect in WordPress (recommended)', 'xmr-pay-for-woocommerce' ); ?></b>
+							<span><?php esc_html_e( 'No server, no buyer action. WordPress scans the chain itself (with your view key, via a public node) and completes the order. Needs the PHP GMP extension.', 'xmr-pay-for-woocommerce' ); ?></span>
+						</label>
+						<label class="xp-radio" data-mode="proof">
+							<input type="radio" name="xp-mode" value="proof"<?php checked( $cur_mode, 'proof' ); ?>>
+							<b><?php esc_html_e( 'Buyer taps “I’ve paid”', 'xmr-pay-for-woocommerce' ); ?></b>
+							<span><?php esc_html_e( 'The lightest. The buyer pastes their transaction ID and WordPress verifies it — no scanning, no agent.', 'xmr-pay-for-woocommerce' ); ?></span>
+						</label>
+						<label class="xp-radio" data-mode="agent">
+							<input type="radio" name="xp-mode" value="agent"<?php checked( $cur_mode, 'agent' ); ?>>
+							<b><?php esc_html_e( 'Run the xmr-pay agent (advanced)', 'xmr-pay-for-woocommerce' ); ?></b>
+							<span><?php esc_html_e( 'Auto-detect via the separate xmr-pay daemon you run (npx xmr-pay); the agent holds the view key.', 'xmr-pay-for-woocommerce' ); ?></span>
+						</label>
 					</section>
 
-					<!-- 1 — connect agent -->
+					<!-- 1 — connect (panel swaps with the chosen mode) -->
 					<section class="xp-step" data-step="1">
-						<h2><?php esc_html_e( 'Connect your agent', 'xmr-pay-for-woocommerce' ); ?></h2>
-						<p class="lead"><?php esc_html_e( 'Paste the Agent URL and token your agent printed. We will ping it live to confirm it is reachable and view-only.', 'xmr-pay-for-woocommerce' ); ?></p>
-						<div class="xp-field">
-							<label for="xp-agent-url"><?php esc_html_e( 'Agent URL', 'xmr-pay-for-woocommerce' ); ?> <span class="hint"><?php esc_html_e( 'keep it private — localhost or a private network', 'xmr-pay-for-woocommerce' ); ?></span></label>
-							<input type="url" id="xp-agent-url" placeholder="http://127.0.0.1:8788" value="<?php echo esc_attr( $g( 'agent_url' ) ); ?>">
+						<!-- no-server panel: watch + proof -->
+						<div data-panel="noserver">
+							<h2><?php esc_html_e( 'Your wallet', 'xmr-pay-for-woocommerce' ); ?></h2>
+							<p class="lead"><?php esc_html_e( 'WordPress verifies payments itself with your VIEW key (view-only — it can see payments, never spend). Nothing runs 24/7.', 'xmr-pay-for-woocommerce' ); ?></p>
+							<div class="xp-field">
+								<label for="xp-addr"><?php esc_html_e( 'Your Monero address', 'xmr-pay-for-woocommerce' ); ?></label>
+								<input type="text" id="xp-addr" class="xp-mono" placeholder="4… (mainnet) / 5… (stagenet)" value="<?php echo esc_attr( $g( 'xmr_address' ) ); ?>">
+							</div>
+							<div class="xp-field">
+								<label for="xp-view"><?php esc_html_e( 'Private view key', 'xmr-pay-for-woocommerce' ); ?> <span class="hint"><?php esc_html_e( 'view-only — never your spend key or seed', 'xmr-pay-for-woocommerce' ); ?></span></label>
+								<?php if ( $has_const ) : ?>
+									<div class="xp-note ok"><?php
+										/* translators: %s: the XMRPAY_VIEW_KEY constant name */
+										printf( esc_html__( 'Loaded from the %s constant in wp-config.php — nothing to enter here.', 'xmr-pay-for-woocommerce' ), '<code>XMRPAY_VIEW_KEY</code>' );
+									?></div>
+								<?php else : ?>
+									<input type="password" id="xp-view" class="xp-mono" placeholder="<?php esc_attr_e( '64 hex characters', 'xmr-pay-for-woocommerce' ); ?>" value="<?php echo esc_attr( $g( 'view_key' ) ); ?>">
+									<div class="xp-note info"><?php
+										/* translators: %s: a PHP define() snippet */
+										printf( esc_html__( 'More private: put %s in wp-config.php so it never touches the database.', 'xmr-pay-for-woocommerce' ), '<code>define(\'XMRPAY_VIEW_KEY\', \'…\');</code>' );
+									?></div>
+								<?php endif; ?>
+							</div>
+							<div class="xp-field">
+								<label for="xp-nodes"><?php esc_html_e( 'Monero node URL(s)', 'xmr-pay-for-woocommerce' ); ?> <span class="hint"><?php esc_html_e( 'comma-separated; a public one is fine', 'xmr-pay-for-woocommerce' ); ?></span></label>
+								<input type="text" id="xp-nodes" class="xp-mono" placeholder="http://node2.monerodevs.org:38089" value="<?php echo esc_attr( $g( 'nodes', 'http://node2.monerodevs.org:38089' ) ); ?>">
+							</div>
+							<div class="xp-field">
+								<label for="xp-minconf"><?php esc_html_e( 'Confirmations required', 'xmr-pay-for-woocommerce' ); ?></label>
+								<input type="text" id="xp-minconf" placeholder="1" value="<?php echo esc_attr( $g( 'proof_min_conf', '1' ) ); ?>">
+								<div class="xp-note info" style="margin-top:8px"><?php esc_html_e( '0 = instant (mempool, riskier) · 1 = first block (~2 min) · 10 = fully unlocked (high value).', 'xmr-pay-for-woocommerce' ); ?></div>
+							</div>
+							<button type="button" class="xp-btn ghost" id="xp-test-node"><?php esc_html_e( 'Test setup', 'xmr-pay-for-woocommerce' ); ?></button>
+							<span class="hint" style="margin-left:8px"><?php esc_html_e( 'checks the node, network, and that your view key matches the address', 'xmr-pay-for-woocommerce' ); ?></span>
+							<div id="xp-node-result" style="margin-top:10px"></div>
 						</div>
-						<div class="xp-field">
-							<label for="xp-agent-token"><?php esc_html_e( 'Agent token', 'xmr-pay-for-woocommerce' ); ?></label>
-							<input type="text" id="xp-agent-token" class="xp-mono" placeholder="<?php esc_attr_e( 'the AGENT_TOKEN from your agent', 'xmr-pay-for-woocommerce' ); ?>" value="<?php echo esc_attr( $g( 'agent_token' ) ); ?>">
+						<!-- agent panel -->
+						<div data-panel="agent" style="display:none">
+							<h2><?php esc_html_e( 'Connect your agent', 'xmr-pay-for-woocommerce' ); ?></h2>
+							<p class="lead"><?php esc_html_e( 'Run npx xmr-pay on a machine you control; it prints an Agent URL, a token, and a webhook secret. Paste them here.', 'xmr-pay-for-woocommerce' ); ?></p>
+							<div class="xp-field">
+								<label for="xp-agent-url"><?php esc_html_e( 'Agent URL', 'xmr-pay-for-woocommerce' ); ?> <span class="hint"><?php esc_html_e( 'keep it private — localhost or a private network', 'xmr-pay-for-woocommerce' ); ?></span></label>
+								<input type="url" id="xp-agent-url" placeholder="http://127.0.0.1:8788" value="<?php echo esc_attr( $g( 'agent_url' ) ); ?>">
+							</div>
+							<div class="xp-field">
+								<label for="xp-agent-token"><?php esc_html_e( 'Agent token', 'xmr-pay-for-woocommerce' ); ?></label>
+								<input type="text" id="xp-agent-token" class="xp-mono" placeholder="<?php esc_attr_e( 'the AGENT_TOKEN from your agent', 'xmr-pay-for-woocommerce' ); ?>" value="<?php echo esc_attr( $g( 'agent_token' ) ); ?>">
+							</div>
+							<button type="button" class="xp-btn ghost" id="xp-test"><?php esc_html_e( 'Test connection', 'xmr-pay-for-woocommerce' ); ?></button>
+							<div class="xp-test" id="xp-test-result"></div>
+							<div class="xp-field" style="margin-top:16px">
+								<label><?php esc_html_e( 'Set the agent\'s FULFILL_WEBHOOK_URL to:', 'xmr-pay-for-woocommerce' ); ?></label>
+								<div class="xp-copy"><code id="xp-webhook-url"><?php echo esc_html( $webhook_url ); ?></code><button type="button" class="xp-btn ghost xp-copy-btn" data-copy="xp-webhook-url"><?php esc_html_e( 'Copy', 'xmr-pay-for-woocommerce' ); ?></button></div>
+							</div>
+							<div class="xp-field">
+								<label for="xp-webhook-secret"><?php esc_html_e( 'Webhook secret', 'xmr-pay-for-woocommerce' ); ?> <span class="hint"><?php esc_html_e( 'the FULFILL_WEBHOOK_SECRET from your agent', 'xmr-pay-for-woocommerce' ); ?></span></label>
+								<input type="text" id="xp-webhook-secret" class="xp-mono" placeholder="whsec_…" value="<?php echo esc_attr( $g( 'webhook_secret' ) ); ?>">
+							</div>
 						</div>
-						<button type="button" class="xp-btn ghost" id="xp-test"><?php esc_html_e( 'Test connection', 'xmr-pay-for-woocommerce' ); ?></button>
-						<div class="xp-test" id="xp-test-result"></div>
 					</section>
 
-					<!-- 2 — webhook -->
+					<!-- 2 — pricing -->
 					<section class="xp-step" data-step="2">
-						<h2><?php esc_html_e( 'Wire the webhook', 'xmr-pay-for-woocommerce' ); ?></h2>
-						<p class="lead"><?php esc_html_e( 'When a payment confirms, the agent notifies this store with a signed message. Point the agent at this URL, and paste the matching secret below.', 'xmr-pay-for-woocommerce' ); ?></p>
-						<div class="xp-field">
-							<label><?php esc_html_e( 'Set the agent\'s FULFILL_WEBHOOK_URL to:', 'xmr-pay-for-woocommerce' ); ?></label>
-							<div class="xp-copy"><code id="xp-webhook-url"><?php echo esc_html( $webhook_url ); ?></code><button type="button" class="xp-btn ghost xp-copy-btn" data-copy="xp-webhook-url"><?php esc_html_e( 'Copy', 'xmr-pay-for-woocommerce' ); ?></button></div>
-						</div>
-						<div class="xp-field">
-							<label for="xp-webhook-secret"><?php esc_html_e( 'Webhook secret', 'xmr-pay-for-woocommerce' ); ?> <span class="hint"><?php esc_html_e( 'the FULFILL_WEBHOOK_SECRET from your agent', 'xmr-pay-for-woocommerce' ); ?></span></label>
-							<input type="text" id="xp-webhook-secret" class="xp-mono" placeholder="whsec_…" value="<?php echo esc_attr( $g( 'webhook_secret' ) ); ?>">
-						</div>
-						<div class="xp-note"><?php esc_html_e( 'The secret must match on both sides. The plugin rejects any webhook whose signature does not verify — so a wrong or empty secret simply means orders never auto-complete.', 'xmr-pay-for-woocommerce' ); ?></div>
-					</section>
-
-					<!-- 3 — pricing -->
-					<section class="xp-step" data-step="3">
 						<h2><?php esc_html_e( 'How prices become XMR', 'xmr-pay-for-woocommerce' ); ?></h2>
 						<?php if ( $is_xmr_store ) : ?>
 							<div class="xp-note ok"><?php esc_html_e( 'Your store currency is already XMR — prices are native Monero and no price feed is used. Nothing to choose here.', 'xmr-pay-for-woocommerce' ); ?></div>
@@ -309,8 +389,8 @@ class XmrPay_Setup {
 						<?php endif; ?>
 					</section>
 
-					<!-- 4 — go live -->
-					<section class="xp-step" data-step="4">
+					<!-- 3 — go live -->
+					<section class="xp-step" data-step="3">
 						<h2><?php esc_html_e( 'How it looks at checkout', 'xmr-pay-for-woocommerce' ); ?></h2>
 						<p class="lead"><?php esc_html_e( 'Last bit. Name the method and match the payment box to your store theme. You can fine-tune everything later in the full settings.', 'xmr-pay-for-woocommerce' ); ?></p>
 						<div class="xp-field">
@@ -351,124 +431,7 @@ class XmrPay_Setup {
 				</div>
 			</div>
 
-			<script>
-			(function(){
-				var ajaxurl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
-				var testNonce = <?php echo wp_json_encode( $test_nonce ); ?>;
-				var saveNonce = <?php echo wp_json_encode( $save_nonce ); ?>;
-				var LAST = 4;                       // index of the last input step (before "done")
-				var step = 0, tested = false;
-				var steps = document.querySelectorAll('.xp-step');
-				var dots  = document.querySelectorAll('#xp-steps .s');
-				var back  = document.getElementById('xp-back');
-				var next  = document.getElementById('xp-next');
-				var foot  = document.getElementById('xp-foot');
-
-				function show(n){
-					steps.forEach(function(s){ s.classList.toggle('show', s.getAttribute('data-step') === String(n)); });
-					dots.forEach(function(d,i){
-						d.classList.toggle('active', i === n);
-						d.classList.toggle('done', i < n);
-					});
-					back.style.visibility = (n > 0 && n <= LAST) ? 'visible' : 'hidden';
-					next.textContent = (n === LAST) ? '<?php echo esc_js( __( 'Finish ✓', 'xmr-pay-for-woocommerce' ) ); ?>' : '<?php echo esc_js( __( 'Next →', 'xmr-pay-for-woocommerce' ) ); ?>';
-					step = n;
-				}
-
-				back.addEventListener('click', function(){ if (step > 0) show(step - 1); });
-
-				next.addEventListener('click', function(){
-					// gate: leaving the "agent" step requires a successful live test.
-					if (step === 1 && !tested){
-						runTest(function(ok){ if (ok) show(2); });
-						return;
-					}
-					if (step === LAST){ finish(); return; }
-					show(step + 1);
-				});
-
-				// ── live connection test (reuses the gateway's ajax_test_agent) ──
-				var testBtn = document.getElementById('xp-test');
-				var testOut = document.getElementById('xp-test-result');
-				function runTest(cb){
-					var url = (document.getElementById('xp-agent-url').value || '').trim();
-					var token = (document.getElementById('xp-agent-token').value || '').trim();
-					if (!url){ testOut.style.color='#b91c1c'; testOut.textContent='✗ <?php echo esc_js( __( 'enter the Agent URL first', 'xmr-pay-for-woocommerce' ) ); ?>'; if(cb)cb(false); return; }
-					testOut.style.color='#6b7280'; testOut.textContent='<?php echo esc_js( __( 'testing…', 'xmr-pay-for-woocommerce' ) ); ?>';
-					var body = new URLSearchParams({action:'xmrpay_test_agent', _wpnonce:testNonce, url:url, token:token});
-					fetch(ajaxurl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
-						.then(function(r){return r.json();})
-						.then(function(d){
-							if (d && d.success){ tested=true; testOut.style.color='#15803d'; testOut.textContent='✓ '+((d.data&&d.data.msg)||'OK'); if(cb)cb(true); }
-							else { tested=false; testOut.style.color='#b91c1c'; testOut.textContent='✗ '+((d&&d.data&&d.data.msg)||'unreachable'); if(cb)cb(false); }
-						})
-						.catch(function(){ tested=false; testOut.style.color='#b91c1c'; testOut.textContent='✗ <?php echo esc_js( __( 'request failed', 'xmr-pay-for-woocommerce' ) ); ?>'; if(cb)cb(false); });
-				}
-				testBtn.addEventListener('click', function(){ runTest(null); });
-				// re-typing the URL/token invalidates a previous green test.
-				['xp-agent-url','xp-agent-token'].forEach(function(id){
-					document.getElementById(id).addEventListener('input', function(){ tested=false; });
-				});
-
-				// ── copy buttons ──
-				document.querySelectorAll('.xp-copy-btn').forEach(function(b){
-					b.addEventListener('click', function(){
-						var el = document.getElementById(b.getAttribute('data-copy'));
-						var t = el ? el.textContent : '';
-						navigator.clipboard && navigator.clipboard.writeText(t);
-						var o = b.textContent; b.textContent='<?php echo esc_js( __( 'Copied', 'xmr-pay-for-woocommerce' ) ); ?>';
-						setTimeout(function(){ b.textContent=o; }, 1400);
-					});
-				});
-
-				// ── pricing radio cards ──
-				document.querySelectorAll('.xp-radio').forEach(function(card){
-					var radio = card.querySelector('input');
-					card.addEventListener('click', function(){
-						radio.checked = true;
-						document.querySelectorAll('.xp-radio').forEach(function(c){
-							var on = c === card;
-							c.classList.toggle('sel', on);
-							var cond = c.querySelector('.xp-cond');
-							if (cond) cond.style.display = on ? 'block' : 'none';
-						});
-					});
-				});
-				var firstCond = document.querySelector('.xp-radio.sel .xp-cond'); if (firstCond) firstCond.style.display='block';
-
-				// ── finish: persist + show the done screen ──
-				function priceSource(){ var r=document.querySelector('input[name=xp-price]:checked'); return r?r.value:'coingecko'; }
-				function val(id){ var e=document.getElementById(id); return e?e.value:''; }
-				function finish(){
-					next.disabled = true; next.textContent='<?php echo esc_js( __( 'Saving…', 'xmr-pay-for-woocommerce' ) ); ?>';
-					var body = new URLSearchParams({
-						action:'xmrpay_setup_save', _wpnonce:saveNonce,
-						agent_url:val('xp-agent-url'), agent_token:val('xp-agent-token'),
-						webhook_secret:val('xp-webhook-secret'),
-						price_source:priceSource(), fixed_rate:val('xp-fixed'), coingecko_api_key:val('xp-cg-key'),
-						title:val('xp-title'), checkout_theme:val('xp-theme')
-					});
-					fetch(ajaxurl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
-						.then(function(r){return r.json();})
-						.then(function(d){
-							next.disabled=false;
-							if (d && d.success){
-								document.getElementById('xp-link-shop').href = d.data.shop_url || '#';
-								document.getElementById('xp-link-settings').href = d.data.settings_url || '#';
-								foot.style.display='none';
-								show('done');
-								dots.forEach(function(dd){ dd.classList.add('done'); dd.classList.remove('active'); });
-							} else {
-								next.textContent='<?php echo esc_js( __( 'Finish ✓', 'xmr-pay-for-woocommerce' ) ); ?>';
-								alert((d&&d.data&&d.data.msg)||'<?php echo esc_js( __( 'Could not save. Try again.', 'xmr-pay-for-woocommerce' ) ); ?>');
-							}
-						})
-						.catch(function(){ next.disabled=false; next.textContent='<?php echo esc_js( __( 'Finish ✓', 'xmr-pay-for-woocommerce' ) ); ?>'; alert('<?php echo esc_js( __( 'Request failed.', 'xmr-pay-for-woocommerce' ) ); ?>'); });
-				}
-
-				show(0);
-			})();
-			</script>
+			<?php // wizard behaviour lives in assets/wizard.js (enqueued + localised in enqueue()) ?>
 		</div>
 		<?php
 	}

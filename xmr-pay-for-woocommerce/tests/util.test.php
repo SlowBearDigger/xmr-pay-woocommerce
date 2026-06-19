@@ -89,5 +89,85 @@ ok( 'same_origin: other host → false',               XmrPay_Util::same_origin(
 ok( 'same_origin: protocol-relative off-site → false', XmrPay_Util::same_origin( '//evil.test/x', 'https://shop.test' ) === false );
 ok( 'same_origin: case-insensitive host → true',     XmrPay_Util::same_origin( 'https://SHOP.test/x', 'https://shop.test' ) === true );
 
+// ---------- pico helpers + amount-nonce (proof mode) ----------
+eq( 'xmr_to_pico exact',         XmrPay_Util::xmr_to_pico( 0.05 ),        50000000000 );
+eq( 'xmr_to_pico 1 pico',        XmrPay_Util::xmr_to_pico( 0.000000000001 ), 1 );
+eq( 'xmr_to_pico zero/neg',      XmrPay_Util::xmr_to_pico( -1 ),          0 );
+eq( 'pico_to_string roundtrip',  XmrPay_Util::pico_to_string( 50000000000 ), '0.05' );
+eq( 'pico_to_string integer',    XmrPay_Util::pico_to_string( 1000000000000 ), '1' );
+eq( 'pico_to_string zero',       XmrPay_Util::pico_to_string( 0 ),        '0' );
+// above signed int64 (~9.2M XMR) must NOT truncate — GMP, exact (hardening fix)
+eq( 'pico_to_string uint64-max', XmrPay_Util::pico_to_string( '18446744073709551615' ), '18446744.073709551615' );
+eq( 'pico_to_string > int64',    XmrPay_Util::pico_to_string( '10000000000000000000' ), '10000000' );
+// nonce: lands in (base, base + 10^6) piconero, never equals the base, exact string
+ok( 'nonce_amount adds 1..999999 pico, exact', (function () {
+	$base = XmrPay_Util::xmr_to_pico( '0.05' );          // 50000000000
+	for ( $i = 0; $i < 500; $i++ ) {
+		$s = XmrPay_Util::nonce_amount( '0.05', 6 );
+		$p = XmrPay_Util::xmr_to_pico( $s );
+		if ( $p <= $base || $p >= $base + 1000000 ) { return false; }
+		if ( XmrPay_Util::pico_to_string( $p ) !== $s ) { return false; }   // canonical, no float tail
+		$dot = strpos( $s, '.' ); if ( $dot !== false && ( strlen( $s ) - $dot - 1 ) > 12 ) { return false; }
+	}
+	return true;
+} )() );
+ok( 'nonce_amount is unique across orders (no collision in 1000 draws)', (function () {
+	$seen = array();
+	for ( $i = 0; $i < 1000; $i++ ) { $seen[ XmrPay_Util::nonce_amount( '0.05', 6 ) ] = true; }
+	return count( $seen ) > 950;   // ~1000 distinct from a 999999-wide space
+} )() );
+eq( 'nonce_amount zero base → 0',  XmrPay_Util::nonce_amount( 0, 6 ),     '0' );
+ok( 'nonce_amount clamps bad digits', XmrPay_Util::nonce_amount( '0.05', 99 ) !== '0' );
+
+// ---------- classify_payment: the money decision in exact piconero ----------
+$cp = function ( $exp, $rec, $tol, $minc, $conf, $pool, $locked ) {
+	return XmrPay_Util::classify_payment( $exp, $rec, $tol, $minc, $conf, $pool, $locked );
+};
+// exact pay, enough confs → paid, no overpay
+$r = $cp( '50000000000', '50000000000', '0', 1, 1, false, false );
+ok( 'classify: exact + 1 conf → paid', $r['status'] === 'paid' && $r['paid'] === true && $r['overpaid_pico'] === '0' );
+// 1 piconero short → underpaid (the boundary that matters)
+$r = $cp( '50000000000', '49999999999', '0', 1, 10, false, false );
+ok( 'classify: 1 pico short → underpaid', $r['status'] === 'underpaid' && $r['paid'] === false && $r['shortfall_pico'] === '1' );
+// 1 piconero over → paid + overpaid 1
+$r = $cp( '50000000000', '50000000001', '0', 1, 10, false, false );
+ok( 'classify: 1 pico over → paid + overpaid 1', $r['status'] === 'paid' && $r['overpaid_pico'] === '1' );
+// no funds → pending
+$r = $cp( '50000000000', '0', '0', 1, 0, false, false );
+ok( 'classify: zero received → pending', $r['status'] === 'pending' && $r['paid'] === false );
+// enough amount but not enough confs, in pool → mempool
+$r = $cp( '50000000000', '50000000000', '0', 2, 0, true, false );
+ok( 'classify: paid amount, 0/2 conf, in pool → mempool', $r['status'] === 'mempool' && $r['paid'] === false );
+// enough amount, not enough confs, not in pool → unconfirmed
+$r = $cp( '50000000000', '50000000000', '0', 2, 1, false, false );
+ok( 'classify: paid amount, 1/2 conf → unconfirmed', $r['status'] === 'unconfirmed' );
+// time-locked → locked even with full amount + confs
+$r = $cp( '50000000000', '50000000000', '0', 1, 100, false, true );
+ok( 'classify: full amount but locked → locked (never paid)', $r['status'] === 'locked' && $r['paid'] === false );
+// tolerance: received exactly expected - tolerance → paid
+$r = $cp( '50000000000', '49999999000', '1000', 1, 1, false, false );
+ok( 'classify: within tolerance → paid', $r['status'] === 'paid' && $r['paid'] === true );
+// tolerance: 1 pico below the tolerant threshold → underpaid
+$r = $cp( '50000000000', '49999998999', '1000', 1, 1, false, false );
+ok( 'classify: 1 pico below tolerant threshold → underpaid', $r['status'] === 'underpaid' );
+// tolerance CLAMP: absurd tolerance must NOT let a zero payment settle
+$r = $cp( '50000000000', '0', '999999999999', 1, 100, false, false );
+ok( 'classify: zero received + absurd tolerance → still pending (no false pay)', $r['status'] === 'pending' && $r['paid'] === false );
+// tolerance CLAMP: threshold floors at 1 pico, so 1 pico settles under absurd tolerance (merchant config)
+$r = $cp( '50000000000', '1', '999999999999', 1, 1, false, false );
+ok( 'classify: tolerance clamps to leave threshold >= 1 pico', $r['status'] === 'paid' );
+// uint64-large amounts (beyond PHP int) handled exactly via gmp
+$big = '18446744073709551615'; // 2^64 - 1
+$r = $cp( $big, $big, '0', 1, 1, false, false );
+ok( 'classify: uint64-max exact → paid (gmp, no overflow)', $r['status'] === 'paid' && $r['overpaid_pico'] === '0' );
+$r = $cp( $big, '18446744073709551614', '0', 1, 1, false, false );
+ok( 'classify: uint64-max minus 1 → underpaid, shortfall 1', $r['status'] === 'underpaid' && $r['shortfall_pico'] === '1' );
+// nonce_amount output is comparable in pico and classifies correctly against its base+nonce
+$nb = XmrPay_Util::xmr_to_pico( '0.05' );
+$ns = XmrPay_Util::nonce_amount( '0.05' );
+$np = XmrPay_Util::xmr_to_pico( $ns );
+$r  = $cp( (string) $np, (string) $np, '0', 1, 1, false, false );
+ok( 'classify: a nonced order amount pays exactly', $r['status'] === 'paid' && $np > $nb );
+
 echo "\n" . ( $fail ? "FAIL" : "ALL GREEN" ) . " — $pass passed, $fail failed\n";
 exit( $fail ? 1 : 0 );
