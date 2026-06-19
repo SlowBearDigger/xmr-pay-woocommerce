@@ -7,6 +7,16 @@ in PHP, against a public Monero node. No third party, no account, no fees from u
 > Requires **PHP 7.4+** (with the **GMP** extension for the no-server modes), **WordPress
 > 6.2+**, **WooCommerce 7.0+**. HPOS-compatible. License **MIT**.
 
+<p>
+  <a href="https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest"><img src="https://img.shields.io/github/v/release/SlowBearDigger/xmr-pay-woocommerce?include_prereleases&color=FF6600&label=release" alt="latest release"></a>
+  <img src="https://img.shields.io/badge/license-MIT-FF6600" alt="MIT">
+  <img src="https://img.shields.io/badge/non--custodial-✓-FF6600" alt="non-custodial">
+  <img src="https://img.shields.io/badge/no--server%20mode-pure%20PHP-FF6600" alt="pure PHP">
+  <a href="https://github.com/SlowBearDigger/xmr-pay"><img src="https://img.shields.io/badge/core-xmr--pay%20(npm)-FF6600" alt="xmr-pay library"></a>
+</p>
+
+**▶ Try it live (stagenet):** [⚙ configure it yourself](https://live.xmrpay.shop) · [🛒 demo store](https://demo.xmrpay.shop) · [🔧 how the library works](https://xmrpay.shop/demo.html) · [↓ download the latest .zip](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest/download/xmr-pay-for-woocommerce.zip)
+
 ## How it verifies — pick a mode
 
 | Mode | Buyer does | Needs a view key? | Runs a daemon? |
@@ -88,5 +98,14 @@ Classic **and** Blocks (Store API) checkout, the three modes above, per-order
 subaddresses, QR via the bundled `<xmr-pay>` widget, signed receipts, HPOS-compatible,
 guided setup wizard. Beta — heading to a 1.0 after a mainnet smoke test and an independent
 audit of the verification path.
+
+## Acknowledgements
+Built on the **[xmr-pay library](https://github.com/SlowBearDigger/xmr-pay)** (the npm core), and the open-source work it stands on — **give them a ⭐:**
+
+- **[monero-integrations / monerophp](https://github.com/monero-integrations/monerophp)** (MIT) — the pure-PHP ed25519 / key-derivation / base58 primitives the WordPress-native verifier is vendored on. The breakthrough that made "verify in PHP" possible.
+- **[kornrunner/php-keccak](https://github.com/kornrunner/php-keccak)** (MIT) — Keccak-256 with Monero's padding, in pure PHP.
+- **[qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator)** (MIT) — the bundled `<xmr-pay>` widget's self-contained QR encoder.
+- **[monero-ts](https://github.com/woodser/monero-ts)** (woodser, MIT) — the WASM reference the PHP verifier is cross-checked against.
+- **Inspiration:** [BTCPay Server](https://btcpayserver.org/)'s Monero plugin and [MoneroPay](https://gitlab.com/moneropay/moneropay) — studied to match (and, on reorg-safety and arithmetic, exceed) their detection model.
 
 A [GoXMR](https://goxmr.click) project · MIT.
