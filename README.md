@@ -56,6 +56,11 @@ The buyer's browser only ever shows status — **fulfillment happens server-side
    - **Confirmations** — `1` is a good default; `0` = instant (riskier).
 5. Test on **stagenet** first, then switch to your mainnet wallet.
 
+> **Stagenet ↔ mainnet — there is no network toggle; the network follows your address.**
+> A `4…` address is **mainnet**; a `5…` / `7…` address is **stagenet**. To go live, just
+> swap the **address + view key + node** to your mainnet ones. The settings page shows the
+> detected network as a badge, and **Check setup** confirms node + network + view-key match.
+
 ## Settings (the two no-server modes)
 Address, view key, node(s), confirmations, and an optional underpayment tolerance — that's
 it. (The "Agent settings" section applies only to **Agent** mode; leave it blank otherwise.)

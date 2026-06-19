@@ -309,7 +309,7 @@ class XmrPay_Setup {
 							<h2><?php esc_html_e( 'Your wallet', 'xmr-pay-for-woocommerce' ); ?></h2>
 							<p class="lead"><?php esc_html_e( 'WordPress verifies payments itself with your VIEW key (view-only — it can see payments, never spend). Nothing runs 24/7.', 'xmr-pay-for-woocommerce' ); ?></p>
 							<div class="xp-field">
-								<label for="xp-addr"><?php esc_html_e( 'Your Monero address', 'xmr-pay-for-woocommerce' ); ?></label>
+								<label for="xp-addr"><?php esc_html_e( 'Your Monero address', 'xmr-pay-for-woocommerce' ); ?> <span class="hint"><?php esc_html_e( 'sets the network — 4… = mainnet, 5… = stagenet', 'xmr-pay-for-woocommerce' ); ?></span></label>
 								<input type="text" id="xp-addr" class="xp-mono" placeholder="4… (mainnet) / 5… (stagenet)" value="<?php echo esc_attr( $g( 'xmr_address' ) ); ?>">
 							</div>
 							<div class="xp-field">

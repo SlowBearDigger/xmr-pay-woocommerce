@@ -135,11 +135,15 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'type'  => 'title',
 				'description' => __( 'Used by both no-server modes — “Auto-detect in WordPress” and “Buyer taps I’ve paid”. Your private view key stays on your own server (we never hold a spend key — funds go straight to your address). WordPress fetches transactions from a public node and verifies them itself.', 'xmr-pay-for-woocommerce' ),
 			),
+			'network_status' => array(
+				'title' => __( 'Network', 'xmr-pay-for-woocommerce' ),
+				'type'  => 'network_status',
+			),
 			'xmr_address' => array(
 				'title'       => __( 'Your Monero address', 'xmr-pay-for-woocommerce' ),
 				'type'        => 'text',
 				'placeholder' => '4... (mainnet) or 5.../7... (stagenet)',
-				'description' => __( 'Your primary Monero address — buyers pay here. Each order gets a unique amount so payments can’t be confused.', 'xmr-pay-for-woocommerce' ),
+				'description' => __( '<strong>The network is set by this address</strong> — a 4… address is mainnet, 5…/7… is stagenet. To go from stagenet to mainnet (or back), change this address plus the view key and node to that network’s. Buyers pay here; each order gets a unique amount so payments can’t be confused.', 'xmr-pay-for-woocommerce' ),
 			),
 			'view_key' => array(
 				'title'       => __( 'Private view key', 'xmr-pay-for-woocommerce' ),
@@ -441,6 +445,24 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'overpaid'      => '0' !== $verdict['overpaid_pico'],
 			'overpaid_xmr'  => XmrPay_Util::pico_to_string( $verdict['overpaid_pico'] ),
 		) );
+	}
+
+	/** Settings-page read-only badge showing which network the saved address is on. */
+	public function generate_network_status_html( $key, $data ) {
+		$net    = $this->detect_network();
+		$colors = array( 'mainnet' => '#15803d', 'stagenet' => '#b45309', 'testnet' => '#6d28d9' );
+		$color  = isset( $colors[ $net ] ) ? $colors[ $net ] : '#374151';
+		$saved  = '' !== trim( (string) $this->get_option( 'xmr_address' ) );
+		ob_start(); ?>
+		<tr valign="top">
+			<th scope="row" class="titledesc"><?php echo esc_html( $data['title'] ); ?></th>
+			<td class="forminp">
+				<span style="display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#fff;background:<?php echo esc_attr( $color ); ?>;padding:5px 13px;border-radius:4px"><?php echo esc_html( $saved ? $net : 'not set' ); ?></span>
+				<p class="description"><?php esc_html_e( 'Detected automatically from your address below — a 4… address is mainnet, 5…/7… is stagenet. To switch networks (e.g. go live from stagenet to mainnet), just enter that network’s address, view key and node. There is no separate toggle — the address decides.', 'xmr-pay-for-woocommerce' ); ?></p>
+			</td>
+		</tr>
+		<?php
+		return ob_get_clean();
 	}
 
 	/** Settings-page "Check setup" button (no-server modes): node + network + view-key match. */
