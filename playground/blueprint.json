@@ -30,6 +30,10 @@
     },
     {
       "step": "runPHP",
+      "code": "<?php require_once('/wordpress/wp-load.php'); if (class_exists('WC_Install')) { WC_Install::create_roles(); } $r=get_role('administrator'); if ($r) { $r->add_cap('manage_woocommerce'); $r->add_cap('view_woocommerce_reports'); } echo 'CAPS_OK';"
+    },
+    {
+      "step": "runPHP",
       "code": "<?php require_once('/wordpress/wp-load.php'); update_option('woocommerce_xmrpay_settings', array('enabled'=>'yes','mode'=>'watch','title'=>'Monero (XMR)','description'=>'Pay privately with Monero. Scan the QR — your wallet fills in the exact amount.','xmr_address'=>'59iRx5JkUsgFg93DWCDsDUBHj8HFnuYLjPPRDapzgfuSYLeb36GKJVHdJ6XAP5K2QJC7TqVdpsthr6JfyMtaSP6bGBPVRCb','view_key'=>'','nodes'=>'http://node.monerodevs.org:38089','proof_min_conf'=>'1','price_source'=>'fixed','fixed_rate'=>'150')); echo 'CONFIG_OK';"
     },
     {
