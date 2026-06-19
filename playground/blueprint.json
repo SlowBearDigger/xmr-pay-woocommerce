@@ -1,6 +1,7 @@
 {
   "$schema": "https://playground.wordpress.net/blueprint-schema.json",
   "meta": {
+    "author": "SlowBearDigger",
     "title": "xmr-pay for WooCommerce — sandbox (stagenet)",
     "description": "Try the admin: install, run the setup wizard, explore the gateway settings. Runs entirely in your browser. NOTE: live on-chain detection needs a real host (the browser sandbox has no GMP and can't reach a Monero node) — see demo.xmrpay.shop for a live stagenet checkout."
   },
