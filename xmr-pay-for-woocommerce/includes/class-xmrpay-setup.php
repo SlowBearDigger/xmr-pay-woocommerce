@@ -48,6 +48,16 @@ class XmrPay_Setup {
 			self::PAGE,
 			array( $this, 'render' )
 		);
+		// Hide it from the submenu for display only — defer the removal to admin_head,
+		// which runs AFTER user_can_access_admin_page() but BEFORE the menu is drawn.
+		// Removing it here (on admin_menu) would make direct-URL access — the post-
+		// activation redirect, the notice button, the plugins-list link — fail with
+		// "Sorry, you are not allowed to access this page."
+		add_action( 'admin_head', array( $this, 'hide_from_menu' ) );
+	}
+
+	/** Remove the wizard from the visible submenu without breaking direct access. */
+	public function hide_from_menu() {
 		remove_submenu_page( 'woocommerce', self::PAGE );
 	}
 
