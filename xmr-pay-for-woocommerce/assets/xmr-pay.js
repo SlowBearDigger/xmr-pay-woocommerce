@@ -2314,7 +2314,7 @@ var XP_STR = {
         trustLink: 'Check the link — you are on',
         proveToggle: 'Paid but still waiting? Prove it',
         txidPh: 'Transaction ID (txid)', proofPh: 'Tx key or payment proof',
-        proofHint: 'Feather: History → right-click the tx → Create tx proof. GUI: open the tx → “P”. Cake/Monerujo: tx details → transaction key. Paste it all in either box — txid and proof sort themselves out.',
+        proofHint: 'Feather: History → right-click the tx → Create tx proof. GUI: open the tx → “P”. Cake/Monerujo: tx details → transaction key. Paste it all in either box — txid and proof sort themselves out. Tip: a payment to this address is best proven with the tx PROOF.',
         verifyBtn: 'Verify payment', verifying: 'Verifying on-chain…', pasteBtn: 'Paste', pasteFail: 'Could not read the clipboard — paste manually',
         detectBtn: "I've paid — detect it", detecting: 'Checking the blockchain…', watching: 'Watching the blockchain for your payment…',
         paidTitle: 'Payment confirmed', confs: 'confirmations',
@@ -2323,9 +2323,9 @@ var XP_STR = {
         underpaid: 'Received {r} XMR, expected {e}',
         topupMsg: 'Detected {r} XMR — send {s} more to complete',
         topupTitle: 'Scan to send the difference',
-        mempool: 'Seen in the mempool — waiting for the first block',
+        mempool: '✓ Payment received — confirming…',
         unconfirmed: 'Not confirmed yet — try again in a minute',
-        confirming: 'Confirming — {c} confirmation(s)…',
+        confirming: '✓ Payment received — confirming ({c})…',
         replay: 'This transaction already paid another order',
         invalid: 'We couldn’t match this to your payment — check the transaction ID and proof are for THIS order',
         badTxid: 'That transaction ID looks off — it should be 64 characters. Copy the whole thing from your wallet',
@@ -2350,7 +2350,7 @@ var XP_STR = {
         trustLink: 'Comprueba el enlace — estás en',
         proveToggle: '¿Pagaste y sigue esperando? Demuéstralo',
         txidPh: 'ID de transacción (txid)', proofPh: 'Tx key o prueba de pago',
-        proofHint: 'Feather: History → clic derecho en la tx → Create tx proof. GUI: abre la tx → “P”. Cake/Monerujo: detalles de la tx → transaction key. Pega todo en cualquier caja — txid y prueba se acomodan solos.',
+        proofHint: 'Feather: History → clic derecho en la tx → Create tx proof. GUI: abre la tx → “P”. Cake/Monerujo: detalles de la tx → transaction key. Pega todo en cualquier caja — txid y prueba se acomodan solos. Tip: un pago a esta dirección se prueba mejor con la tx PROOF.',
         verifyBtn: 'Verificar pago', verifying: 'Verificando en cadena…', pasteBtn: 'Pegar', pasteFail: 'No se pudo leer el portapapeles — pega a mano',
         detectBtn: 'Ya pagué — detectar', detecting: 'Revisando la blockchain…', watching: 'Esperando tu pago en la blockchain…',
         paidTitle: 'Pago confirmado', confs: 'confirmaciones',
@@ -2359,9 +2359,9 @@ var XP_STR = {
         underpaid: 'Se recibió {r} XMR, se esperaban {e}',
         topupMsg: 'Detectado {r} XMR — envía {s} más para completar',
         topupTitle: 'Escanea para enviar la diferencia',
-        mempool: 'Visto en el mempool — esperando el primer bloque',
+        mempool: '✓ Pago recibido — confirmando…',
         unconfirmed: 'Aún sin confirmar — prueba en un minuto',
-        confirming: 'Confirmando — {c} confirmación(es)…',
+        confirming: '✓ Pago recibido — confirmando ({c})…',
         replay: 'Esta transacción ya pagó otra orden',
         invalid: 'No pudimos relacionarlo con tu pago — revisa que el ID de transacción y la prueba sean de ESTA orden',
         badTxid: 'Ese ID de transacción no cuadra — debe tener 64 caracteres. Copia el completo desde tu wallet',
@@ -2515,9 +2515,11 @@ async function xpVerifyConfig(env) {
 }
 
 class XmrPay extends HTMLElement {
-    static get observedAttributes() { return ['address', 'amount', 'label', 'order', 'verify-url', 'status-url', 'lang', 'redirect-url', 'theme']; }
+    static get observedAttributes() { return ['address', 'amount', 'label', 'order', 'verify-url', 'status-url', 'stream-url', 'lang', 'redirect-url', 'theme']; }
 
     connectedCallback() { this._resolve().then(() => this._render()); }
+    disconnectedCallback() { this._closeStream(); clearTimeout(this._watchT); clearTimeout(this._repollT); }
+    _closeStream() { if (this._es) { try { this._es.close(); } catch (e) {} this._es = null; } this._streaming = false; }
     attributeChangedCallback() { if (this.isConnected) this._resolve().then(() => this._render()); }
 
     // work out the effective address/amount and the signing state before render.
@@ -2685,14 +2687,22 @@ class XmrPay extends HTMLElement {
         var verifyBtn = root.querySelector('.verify');
         if (verifyBtn) verifyBtn.addEventListener('click', function () { self._verify(root, verifyUrl, t); });
 
-        // watch mode: wire the "detect" button + start auto-polling the status URL.
+        // watch mode: wire the "detect" button, open a push stream if offered, and
+        // auto-poll the status URL. the stream (SSE) updates the buyer in seconds;
+        // the poll stays as a backup so a buffering proxy can't make a payment look
+        // lost — it just slows to a heartbeat cadence when a stream is live.
         var statusUrl = (this.getAttribute('status-url') || '').trim();
+        var streamUrl = (this.getAttribute('stream-url') || '').trim();
         var detectBtn = root.querySelector('.detect');
-        if (statusUrl) {
+        if (statusUrl || streamUrl) {
             this._paidDone = false;
-            if (detectBtn) detectBtn.addEventListener('click', function () { self._watch(root, statusUrl, t, true); });
-            clearTimeout(this._watchT);
-            this._watchT = setTimeout(function () { self._watch(root, statusUrl, t, false); }, 1500);
+            if (detectBtn && statusUrl) detectBtn.addEventListener('click', function () { self._watch(root, statusUrl, t, true); });
+            this._closeStream();
+            if (streamUrl && typeof EventSource !== 'undefined') this._stream(root, streamUrl, t);
+            if (statusUrl) {
+                clearTimeout(this._watchT);
+                this._watchT = setTimeout(function () { self._watch(root, statusUrl, t, false); }, 1500);
+            }
         }
 
         // smart paste: Feather's "formatted proof" (and similar) is one text
@@ -2808,6 +2818,24 @@ class XmrPay extends HTMLElement {
         }
     }
 
+    // push stream: connect to the agent's SSE channel (stream-url). each event is a
+    // full status snapshot — same shape as the poll — so detection lands in seconds
+    // with no polling lag. the browser auto-reconnects on a dropped connection; the
+    // backup poll keeps running (slowed) so a proxy that buffers SSE can't strand a
+    // payment. closed once paid (or on disconnect).
+    _stream(root, streamUrl, t) {
+        var self = this;
+        var es;
+        try { es = new EventSource(streamUrl); } catch (e) { return; }
+        this._es = es;
+        this._streaming = true;
+        es.onmessage = function (ev) {
+            var out; try { out = JSON.parse(ev.data); } catch (e) { return; }
+            self._applyWatch(root, out, t);
+        };
+        es.onerror = function () { /* keep the poll backup; EventSource auto-reconnects */ };
+    }
+
     // watch mode poll: GET the status URL (the agent /order/:id or a proxy) and
     // react. no proof to paste — the agent is already scanning the chain. keeps
     // polling on mempool/unconfirmed; on paid → _success (→ receipt). `manual`
@@ -2816,7 +2844,6 @@ class XmrPay extends HTMLElement {
         if (this._paidDone || !this.isConnected) return;
         var self = this;
         var btn = root.querySelector('.detect');
-        var wst = root.querySelector('.wst');
         if (manual && btn) { btn.disabled = true; btn.textContent = t.detecting; }
         var out = null;
         try {
@@ -2825,16 +2852,30 @@ class XmrPay extends HTMLElement {
         } catch (e) { out = { reachable: false }; }
         if (manual && btn) { btn.disabled = false; btn.textContent = t.detectBtn; }
         if (this._paidDone) return;
+        this._applyWatch(root, out, t);
+        // backup cadence: brisk when polling alone, a slow heartbeat when a push
+        // stream is carrying the live updates.
+        clearTimeout(this._watchT);
+        var active = out && (out.status === 'mempool' || out.status === 'unconfirmed');
+        var delay = this._streaming ? 20000 : (active ? 8000 : 6000);
+        this._watchT = setTimeout(function () { self._watch(root, statusUrl, t, false); }, delay);
+    }
 
+    // fold one status snapshot (from a poll OR a stream event) into the UI.
+    _applyWatch(root, out, t) {
+        if (this._paidDone) return;
         if (out && out.paid) {
-            this._paidDone = true; clearTimeout(this._watchT);
+            this._paidDone = true; clearTimeout(this._watchT); this._closeStream();
             this.dispatchEvent(new CustomEvent('xmr-pay:result', { detail: out, bubbles: true, composed: true }));
             this._success(root, out, t);
             return;
         }
+        var wst = root.querySelector('.wst');
         if (wst) {
             var status = out && out.status;
             var msg;
+            // lead with "payment received" the instant a tx is seen (mempool/unconfirmed)
+            // so the buyer feels done and stops worrying — it's only confirmations left.
             if (status === 'mempool') msg = t.mempool;
             else if (status === 'unconfirmed' && out.confirmations != null) msg = t.confirming.replace('{c}', out.confirmations);
             else if ((status === 'partial' || status === 'underpaid') && out.shortfallXmr != null) msg = t.topupMsg.replace('{r}', out.receivedXmr != null ? out.receivedXmr : '?').replace('{s}', out.shortfallXmr);
@@ -2842,9 +2883,6 @@ class XmrPay extends HTMLElement {
             wst.textContent = msg;
             wst.className = 'wst' + (status === 'mempool' || status === 'unconfirmed' ? ' mid' : '');
         }
-        clearTimeout(this._watchT);
-        var delay = (out && (out.status === 'mempool' || out.status === 'unconfirmed')) ? 8000 : 6000;
-        this._watchT = setTimeout(function () { self._watch(root, statusUrl, t, false); }, delay);
     }
 
     _success(root, out, t) {
@@ -2870,8 +2908,13 @@ class XmrPay extends HTMLElement {
         this.dispatchEvent(new CustomEvent('xmr-pay:paid', { detail: out, bubbles: true, composed: true }));
         // auto-redirect is opt-in (redirect-url). but a downloadable receipt must
         // not be yanked away — when one is shown, keep the buyer on the page.
-        var redirect = this.getAttribute('redirect-url');
-        if (redirect && !hasReceipt) setTimeout(function () { location.assign(redirect); }, 2500);
+        // SANITIZE: only an absolute http(s) URL or a single-slash same-origin path
+        // is followed. NEVER a javascript:/data:/protocol-relative value — location
+        // .assign('javascript:…') EXECUTES it (XSS). the embedder sets this attribute,
+        // but a value from untrusted input must not become script execution.
+        var redirect = this.getAttribute('redirect-url') || '';
+        var safeRedirect = (/^https?:\/\//i.test(redirect) || /^\/[^/]/.test(redirect)) ? redirect : '';
+        if (safeRedirect && !hasReceipt) setTimeout(function () { location.assign(safeRedirect); }, 2500);
     }
 
     // fetch the signed receipt (from receipt-url, the agent /receipt/:id or a
