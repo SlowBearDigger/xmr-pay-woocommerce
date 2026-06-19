@@ -4,7 +4,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.1.7-beta
+Stable tag: 0.1.8-beta
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -82,6 +82,9 @@ This plugin does **not** track you or your customers, sends **no** analytics, an
 Your Monero **private view key** (used by the no-server modes) stays on your own server — it is never sent to any external service, including the node.
 
 == Changelog ==
+
+= 0.1.8 (beta) =
+* **Clearer network indicator.** The settings now show which network you are on (mainnet / stagenet / testnet) as a badge, and the wizard + address field explain that the network follows your address — there is no separate toggle. To go live, swap the address, view key and node to your mainnet ones.
 
 = 0.1.7 (beta) =
 * **Privacy — Monero orders no longer store the buyer's IP address or user-agent.** WooCommerce records both on every order; since Monero is irreversible (no chargebacks), there's no dispute reason to keep them, so the plugin strips them from its orders.
