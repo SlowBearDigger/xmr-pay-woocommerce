@@ -48,6 +48,10 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		// proof mode: the buyer submits a txid here and WordPress verifies it on-chain.
 		add_action( 'woocommerce_api_xmrpay_verify', array( $this, 'handle_verify' ) );
 		add_action( 'woocommerce_order_refunded', array( $this, 'on_refunded' ), 10, 2 );
+		// privacy: Monero orders carry no IP / user-agent. Monero is irreversible
+		// (no chargebacks), so there is no fraud-dispute reason to retain them.
+		add_action( 'woocommerce_checkout_create_order', array( $this, 'strip_pii' ), 20, 2 );
+		add_action( 'woocommerce_store_api_checkout_update_order_from_request', array( $this, 'strip_pii' ), 20, 2 );
 		// admin: a payment-detail block on the order screen (HPOS-safe hook).
 		// NB: the wp_ajax_xmrpay_test_* handlers are registered at the top level (in
 		// the main plugin file), NOT here — admin-ajax requests don't construct the
@@ -55,6 +59,19 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		add_action( 'admin_notices', array( $this, 'maybe_warn_gmp' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'admin_assets' ) );
 		add_action( 'woocommerce_admin_order_data_after_billing_address', array( $this, 'admin_order_details' ) );
+	}
+
+	/**
+	 * Privacy: drop the buyer's IP address + user-agent on Monero orders (classic
+	 * and Store API checkout). WooCommerce records both on every order; for an
+	 * irreversible currency there is no chargeback/dispute reason to keep them.
+	 */
+	public function strip_pii( $order, $data = null ) {
+		$method = ( is_array( $data ) && ! empty( $data['payment_method'] ) ) ? $data['payment_method'] : $order->get_payment_method();
+		if ( $this->id === $method ) {
+			$order->set_customer_ip_address( '' );
+			$order->set_customer_user_agent( '' );
+		}
 	}
 
 	/** Write to the WooCommerce log (source: xmrpay) when debug logging is on. */
@@ -403,6 +420,16 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		// never settle, even at min_conf 0 — only a mempool (in_pool) tx counts as 0-conf.
 		$cf = array_key_exists( 'confirmations', $r ) ? $r['confirmations'] : null;
 		if ( null === $cf && empty( $r['in_pool'] ) ) { return; }
+		// keep the order's confirmation count fresh while the payment is still
+		// maturing, so the admin shows "received — N confirmations" before it settles
+		// (the buyer's panel already updates live from each poll).
+		if ( null !== $cf ) {
+			$prev = $order->get_meta( '_xmrpay_confirmations' );
+			if ( '' === $prev || (int) $cf !== (int) $prev ) {
+				$order->update_meta_data( '_xmrpay_confirmations', (int) $cf );
+				$order->save();
+			}
+		}
 		$verdict = XmrPay_Util::classify_payment( $exp_pico, $r['amount_atomic'], $tol_pico, $min_conf, isset( $r['confirmations'] ) ? (int) $r['confirmations'] : 0, ! empty( $r['in_pool'] ), ! empty( $r['locked'] ) );
 		if ( ! $verdict['paid'] ) { return; }
 		$txid = isset( $r['txid'] ) && '' !== $r['txid'] ? $r['txid'] : (string) $order->get_meta( '_xmrpay_watch_txid' );

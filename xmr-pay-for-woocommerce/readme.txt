@@ -4,7 +4,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.1.6-beta
+Stable tag: 0.1.7-beta
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -82,6 +82,10 @@ This plugin does **not** track you or your customers, sends **no** analytics, an
 Your Monero **private view key** (used by the no-server modes) stays on your own server — it is never sent to any external service, including the node.
 
 == Changelog ==
+
+= 0.1.7 (beta) =
+* **Privacy — Monero orders no longer store the buyer's IP address or user-agent.** WooCommerce records both on every order; since Monero is irreversible (no chargebacks), there's no dispute reason to keep them, so the plugin strips them from its orders.
+* The order's **confirmation count now updates while the payment is maturing** — the admin shows progress ("received — N confirmations") before the order settles, not just the final value. (The buyer's checkout page already updated live.)
 
 = 0.1.6 (beta) =
 * **No-server modes — accept Monero with no external agent.** The plugin can now verify payments in **pure PHP** (vendored Monero crypto: ed25519, Keccak, base58), in two new modes: **Auto-detect** (a view-only watch over your address + node) and **"I've paid"** (the buyer pastes a transaction ID, verified on-chain). The advanced **Agent** mode is still there. The no-server modes need the **GMP** PHP extension (most hosts have it, or can enable it).
