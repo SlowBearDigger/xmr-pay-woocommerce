@@ -15,7 +15,7 @@ in PHP, against a public Monero node. No third party, no account, no fees from u
   <a href="https://github.com/SlowBearDigger/xmr-pay"><img src="https://img.shields.io/badge/core-xmr--pay%20(npm)-FF6600" alt="xmr-pay library"></a>
 </p>
 
-**▶ Try it live (stagenet):** [⚙ configure it yourself](https://live.xmrpay.shop) · [🛒 demo store](https://demo.xmrpay.shop) · [🔧 how the library works](https://xmrpay.shop/demo.html) · [↓ download the latest .zip](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest/download/xmr-pay-for-woocommerce.zip)
+**▶ Try it live (stagenet):** [configure it yourself](https://live.xmrpay.shop) · [demo store](https://demo.xmrpay.shop) · [how the library works](https://xmrpay.shop/demo.html) · [↓ download the latest .zip](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest/download/xmr-pay-for-woocommerce.zip)
 
 ## How it verifies — pick a mode
 
@@ -100,7 +100,7 @@ guided setup wizard. Beta — heading to a 1.0 after a mainnet smoke test and an
 audit of the verification path.
 
 ## Acknowledgements
-Built on the **[xmr-pay library](https://github.com/SlowBearDigger/xmr-pay)** (the npm core), and the open-source work it stands on — **give them a ⭐:**
+Built on the **[xmr-pay library](https://github.com/SlowBearDigger/xmr-pay)** (the npm core), and the open-source work it stands on — **give them a star:**
 
 - **[monero-integrations / monerophp](https://github.com/monero-integrations/monerophp)** (MIT) — the pure-PHP ed25519 / key-derivation / base58 primitives the WordPress-native verifier is vendored on. The breakthrough that made "verify in PHP" possible.
 - **[kornrunner/php-keccak](https://github.com/kornrunner/php-keccak)** (MIT) — Keccak-256 with Monero's padding, in pure PHP.
