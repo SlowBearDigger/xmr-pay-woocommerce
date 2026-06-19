@@ -48,7 +48,16 @@ add_filter( 'user_has_cap', function ( $allcaps, $caps, $args, $user ) {
 	return $allcaps;
 }, 99, 4 );
 
-// 3) a sandbox banner on the storefront (fixed top bar, theme-independent).
+// 3) privacy: never store the buyer's IP address or user-agent on orders.
+//    (WooCommerce core records these on every order; this strips them. Monero is
+//    irreversible — no chargebacks — so there's no reason to keep them.)
+add_action( 'woocommerce_checkout_create_order', function ( $order ) {
+	$order->set_customer_ip_address( '' );
+	$order->set_customer_user_agent( '' );
+}, 999 );
+add_filter( 'woocommerce_order_get_customer_ip_address', '__return_empty_string', 999 );
+
+// 4) a sandbox banner on the storefront (fixed top bar, theme-independent).
 add_action( 'wp_head', function () {
 	if ( is_admin() ) {
 		return;
