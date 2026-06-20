@@ -6,7 +6,7 @@ use Exception;
 use function mb_strlen;
 use function mb_substr;
 
-if ( ! defined( 'ABSPATH' ) && ! defined( 'XMRPAY_TESTING' ) ) { exit; } // vendored: no direct web access
+if ( ! defined( 'ABSPATH' ) ) { exit; } // vendored: no direct web access
 
 final class Keccak
 {
@@ -265,7 +265,7 @@ final class Keccak
         $temp = mb_substr($in_raw, (int) $in_t, (int) $inlen, self::ENCODING);
         $temp = str_pad($temp, (int) $rsiz, "\x0", STR_PAD_RIGHT);
         $temp = substr_replace($temp, chr($suffix), $inlen, 1);
-        $temp = substr_replace($temp, chr((int) $temp[intval($rsiz - 1)] | 0x80), $rsiz - 1, 1);
+        $temp = substr_replace($temp, chr(ord($temp[intval($rsiz - 1)]) | 0x80), $rsiz - 1, 1);
 
         for ($i = 0; $i < $rsizw; $i++) {
             $t = unpack('v*', mb_substr($temp, $i * 8, 8, self::ENCODING));

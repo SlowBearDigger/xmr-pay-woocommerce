@@ -30,7 +30,7 @@
 namespace MoneroIntegrations\MoneroPhp;
 use Exception;
 
-if ( ! defined( 'ABSPATH' ) && ! defined( 'XMRPAY_TESTING' ) ) { exit; } // vendored: no direct web access
+if ( ! defined( 'ABSPATH' ) ) { exit; } // vendored: no direct web access
 
 class base58
 {
@@ -307,7 +307,7 @@ class base58
     $order = 1;
     for ($i = count($data) - 1; $i >= 0; $i--) {
       $digit = strpos(self::$alphabet, chr($data[$i]));
-      if ($digit < 0) {
+      if ($digit === false || $digit < 0) {
         throw new Exception("base58->decode_block(): Invalid character ($digit \"{$digit}\" not found in base58::\$alphabet)");
       }
 
@@ -360,7 +360,7 @@ class base58
     }
 
     $data = array_fill(0, $data_size, 0);
-    for ($i = 0; $i <= $full_block_count; $i++) {
+    for ($i = 0; $i < $full_block_count; $i++) {
       $data = self::decode_block(array_slice($enc, $i * self::$full_encoded_block_size, ($i * self::$full_encoded_block_size + self::$full_encoded_block_size) - ($i * self::$full_encoded_block_size)), $data, $i * self::$full_block_size);
     }
 

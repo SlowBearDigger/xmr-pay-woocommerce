@@ -34,7 +34,7 @@ namespace MoneroIntegrations\MoneroPhp;
 
 use Exception;
 
-if ( ! defined( 'ABSPATH' ) && ! defined( 'XMRPAY_TESTING' ) ) { exit; } // vendored: no direct web access
+if ( ! defined( 'ABSPATH' ) ) { exit; } // vendored: no direct web access
 
 class ed25519
 {

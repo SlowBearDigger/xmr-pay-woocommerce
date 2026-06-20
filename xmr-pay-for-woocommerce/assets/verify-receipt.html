@@ -87,7 +87,8 @@ async function fingerprint(pubPem){
 }
 // exact piconero → XMR string, no float
 function picoToXmr(pico){
-  let s = String(pico); const neg = s.startsWith('-'); if(neg) s=s.slice(1);
+  let s = String(pico); if (!/^-?\d+$/.test(s)) return '?';
+  const neg = s.startsWith('-'); if(neg) s=s.slice(1);
   s = s.padStart(13,'0');
   const whole = s.slice(0,-12), frac = s.slice(-12).replace(/0+$/,'');
   return (neg?'-':'') + whole + (frac?'.'+frac:'');

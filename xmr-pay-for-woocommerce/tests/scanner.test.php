@@ -10,7 +10,8 @@
  * one to a PRIMARY address, one to a per-order SUBADDRESS — same wallet view key.
  */
 
-define( 'XMRPAY_TESTING', true );
+define( 'ABSPATH', __DIR__ . '/' );   // satisfy the includes' direct-access guard
+if ( ! function_exists( 'wp_parse_url' ) ) { function wp_parse_url( $url, $component = -1 ) { return parse_url( (string) $url, $component ); } }
 require_once __DIR__ . '/../includes/class-xmrpay-util.php';
 require_once __DIR__ . '/../includes/class-xmrpay-scanner.php';
 
