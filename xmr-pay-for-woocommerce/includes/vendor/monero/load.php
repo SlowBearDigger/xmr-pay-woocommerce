@@ -18,7 +18,8 @@
  * detection and RingCT amount decode all reproduced exactly. monerophp itself is
  * unmaintained, which is WHY we vendor + own it; it runs clean on PHP 8.5.
  *
- * Requires the GMP extension for usable speed (BCMath fallback works but is ~10x slower).
+ * Requires BOTH the GMP and BCMath extensions: base58 is BCMath-only, the money math is
+ * GMP-only, and ed25519 uses GMP when present (BCMath fallback works but is ~10x slower).
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }

@@ -13,6 +13,17 @@ class XmrPay_Util {
 	const XMR_DECIMALS = 12;
 
 	/**
+	 * The PHP extensions the no-server (pure-PHP) verifier needs to run WITHOUT fataling.
+	 * BOTH are required: the money math (this class, summarize/classify) is GMP-only, and the
+	 * vendored base58 (decode_address, hit on every key check + every scan) is BCMath-only.
+	 * Every "is the gateway available?" guard MUST go through this, so a host missing either one
+	 * never shows the payment method and then white-screens the buyer after they paid.
+	 */
+	public static function crypto_ready() {
+		return extension_loaded( 'gmp' ) && extension_loaded( 'bcmath' );
+	}
+
+	/**
 	 * Canonical XMR decimal string: at most 12 decimals (piconero precision),
 	 * trailing zeros trimmed, never empty. This is what the buyer pays AND what
 	 * the agent is told to expect — one string, so they can never drift.

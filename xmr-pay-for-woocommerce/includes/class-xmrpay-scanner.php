@@ -17,7 +17,8 @@
  *                    amount is the REAL committed amount, not a forged ecdh value.
  *   4. unlock/conf — unlock_time elapsed + enough confirmations → spendable, settled.
  *
- * Requires GMP for usable speed (BCMath fallback works but is ~10x slower).
+ * Requires BOTH the GMP and BCMath PHP extensions: the money math is GMP-only and the
+ * vendored base58 (decode_address) is BCMath-only. ed25519 prefers GMP for speed.
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
