@@ -247,9 +247,10 @@ class XmrPay_Scanner {
 	}
 	private function cn_ed() {
 		// reach the vendored ed25519 instance the Cryptonote toolbox already holds.
-		// the vendored Cryptonote holds ed25519 as a protected prop; read it via
-		// reflection (no setAccessible — it's a no-op + deprecated since PHP 8.1/8.5).
+		// it's a protected prop — setAccessible(true) is REQUIRED on PHP 7.4 / 8.0
+		// (without it getValue() throws); on 8.1+ it's a harmless no-op.
 		$ref = new ReflectionProperty( get_class( $this->cn ), 'ed25519' );
+		$ref->setAccessible( true );
 		return $ref->getValue( $this->cn );
 	}
 
