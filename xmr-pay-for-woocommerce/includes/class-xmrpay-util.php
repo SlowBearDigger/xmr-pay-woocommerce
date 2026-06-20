@@ -253,18 +253,27 @@ class XmrPay_Util {
 	}
 
 	/**
-	 * Collapse rows that share a REAL txid down to one most-creditable copy, ORDER-
-	 * INDEPENDENTLY. The same tx can surface more than once (e.g. a known-txid re-verify
-	 * AND a fresh block-scan hit in the same tick); count it once. An empty/missing txid
-	 * is never a duplicate of another, so each such row is kept.
+	 * Collapse rows that are the SAME spendable output down to one most-creditable copy,
+	 * ORDER-INDEPENDENTLY. The dedup key is the one-time OUTPUT KEY (P, the vout target.key)
+	 * when we have it, falling back to the txid.
+	 *
+	 * Keying on the output key is the BURNING-BUG defence (Monero, 2018): an attacker can
+	 * craft two outputs to your subaddress that share a one-time key P, in DIFFERENT txs, so
+	 * each carries a valid amount commitment but on-chain only ONE is ever spendable (they
+	 * share a key image). Deduping by txid alone would count both and credit the order twice
+	 * for one real payment — direct loss. Deduping by P counts at most one, matching what
+	 * wallet2 / monero-ts (the library's transport) do for free. It also subsumes the
+	 * in/pool overlap (same output → same P). A row with neither key is kept on its own.
 	 */
-	public static function dedup_by_txid( $rows ) {
+	public static function dedup_outputs( $rows ) {
 		if ( ! is_array( $rows ) ) { return array(); }
 		$pos = array();
 		$out = array();
 		foreach ( $rows as $t ) {
-			if ( ! is_array( $t ) || ! isset( $t['txid'] ) || '' === (string) $t['txid'] ) { $out[] = $t; continue; }
-			$k = (string) $t['txid'];
+			if ( ! is_array( $t ) ) { $out[] = $t; continue; }
+			$k = ( isset( $t['out_key'] ) && '' !== (string) $t['out_key'] ) ? 'k:' . (string) $t['out_key']
+				: ( ( isset( $t['txid'] ) && '' !== (string) $t['txid'] ) ? 't:' . (string) $t['txid'] : '' );
+			if ( '' === $k ) { $out[] = $t; continue; }
 			if ( ! isset( $pos[ $k ] ) ) { $pos[ $k ] = count( $out ); $out[] = $t; }
 			else { $out[ $pos[ $k ] ] = self::more_creditable( $out[ $pos[ $k ] ], $t ); }
 		}
@@ -278,14 +287,14 @@ class XmrPay_Util {
 	 * Only an output whose decoded amount is COMMITTED on-chain (commitment_ok) is ever
 	 * credited. Status vocabulary matches the lib: paid|locked|mempool|partial|pending.
 	 *
-	 * @param array  $rows      [{txid, amount_atomic, confirmations|null, in_pool, locked, commitment_ok}]
+	 * @param array  $rows      [{txid, out_key, amount_atomic, confirmations|null, in_pool, locked, commitment_ok}]
 	 * @param string $exp_pico  expected amount in piconero
 	 * @param string $tol_pico  accepted shortfall in piconero (clamped < expected)
 	 * @param int    $min_conf  confirmations required to credit a tx
 	 */
 	public static function summarize_payments( $rows, $exp_pico, $tol_pico, $min_conf ) {
 		$min_conf = max( 0, (int) $min_conf );
-		$rows     = self::dedup_by_txid( is_array( $rows ) ? $rows : array() );
+		$rows     = self::dedup_outputs( is_array( $rows ) ? $rows : array() );
 		$confirmed = gmp_init( 0 );
 		$pending   = gmp_init( 0 );
 		$locked    = gmp_init( 0 );

@@ -60,6 +60,31 @@ $x  = verdict_str( XmrPay_Util::summarize_payments( array( $la, $lb ), '100', '0
 $y  = verdict_str( XmrPay_Util::summarize_payments( array( $lb, $la ), '100', '0', 1 ) );
 ok( 'order-independence: same txid differing only in lock → same verdict (held locked)', $x === $y && strpos( $x, 'locked' ) !== false, "$x  vs  $y" );
 
+// ── 3c. BURNING BUG: two outputs sharing a one-time key (P), in DIFFERENT txids ──
+// the 2018 Monero attack: an attacker crafts two outputs to the subaddress with the same
+// output key P across two txs; each has a valid commitment but on-chain only ONE is
+// spendable (shared key image). Deduping by txid alone credits both = direct loss. We
+// dedup by P, so it counts once.
+$b1 = XmrPay_Util::summarize_payments( array(
+	row( 'txA', 100, array( 'out_key' => 'P_same' ) ),
+	row( 'txB', 100, array( 'out_key' => 'P_same' ) ),
+), '100', '0', 1 );
+ok( 'burning bug: same output key across two txids is credited ONCE', $b1['received_pico'] === '100' && $b1['paid'] === true, verdict_str( $b1 ) );
+
+// the actual exploit: a 200 order must NOT settle on two same-key 100 outputs (100 real).
+$b2 = XmrPay_Util::summarize_payments( array(
+	row( 'txA', 100, array( 'out_key' => 'P_same' ) ),
+	row( 'txB', 100, array( 'out_key' => 'P_same' ) ),
+), '200', '0', 1 );
+ok( 'burning bug: a 200 order is NOT settled by two same-key 100 outputs', $b2['paid'] === false && $b2['received_pico'] === '100', verdict_str( $b2 ) );
+
+// distinct output keys are two real payments and still sum.
+$b3 = XmrPay_Util::summarize_payments( array(
+	row( 'txA', 100, array( 'out_key' => 'P1' ) ),
+	row( 'txB', 100, array( 'out_key' => 'P2' ) ),
+), '200', '0', 1 );
+ok( 'distinct output keys (two real payments) still sum to paid', $b3['paid'] === true && $b3['received_pico'] === '200', verdict_str( $b3 ) );
+
 // ── 4. IN/POOL DEDUP: same txid as confirmed AND pool → counted once, confirmed wins ──
 $conf = row( 't', 50 );
 $pool = row( 't', 50, array( 'in_pool' => true, 'confirmations' => null ) );
