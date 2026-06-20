@@ -32,12 +32,12 @@ final class XmrPay_Blocks_Support extends AbstractPaymentMethodType {
 		if ( 'agent' === $mode ) {
 			return '' !== trim( (string) ( isset( $this->settings['agent_url'] ) ? $this->settings['agent_url'] : '' ) );
 		}
-		// no-server modes: address + view key (constant or setting) + GMP (the verifier needs it).
+		// no-server modes: address + view key (constant or setting) + GMP and BCMath (the verifier needs both).
 		$has_view = ( defined( 'XMRPAY_VIEW_KEY' ) && '' !== trim( (string) XMRPAY_VIEW_KEY ) )
 			|| '' !== trim( (string) ( isset( $this->settings['view_key'] ) ? $this->settings['view_key'] : '' ) );
 		return '' !== trim( (string) ( isset( $this->settings['xmr_address'] ) ? $this->settings['xmr_address'] : '' ) )
 			&& $has_view
-			&& extension_loaded( 'gmp' );
+			&& XmrPay_Util::crypto_ready();
 	}
 
 	public function get_payment_method_script_handles() {

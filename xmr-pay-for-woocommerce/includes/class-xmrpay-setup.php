@@ -292,7 +292,7 @@ class XmrPay_Setup {
 						<label class="xp-radio sel" data-mode="watch">
 							<input type="radio" name="xp-mode" value="watch"<?php checked( $cur_mode, 'watch' ); ?>>
 							<b><?php esc_html_e( 'Auto-detect in WordPress (recommended)', 'xmr-pay-for-woocommerce' ); ?></b>
-							<span><?php esc_html_e( 'No server, no buyer action. WordPress scans the chain itself (with your view key, via a public node) and completes the order. Needs the PHP GMP extension.', 'xmr-pay-for-woocommerce' ); ?></span>
+							<span><?php esc_html_e( 'No server, no buyer action. WordPress scans the chain itself (with your view key, via a public node) and completes the order. Needs the PHP GMP and BCMath extensions.', 'xmr-pay-for-woocommerce' ); ?></span>
 						</label>
 						<label class="xp-radio" data-mode="proof">
 							<input type="radio" name="xp-mode" value="proof"<?php checked( $cur_mode, 'proof' ); ?>>

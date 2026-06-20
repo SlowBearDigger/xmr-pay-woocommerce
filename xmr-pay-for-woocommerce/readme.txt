@@ -30,7 +30,7 @@ Accept Monero (XMR) in WooCommerce, non-custodial, with no backend. WordPress ve
 
 **Agent** (advanced): you run the separate [xmr-pay daemon](https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/AGENT.md); it holds the view key and notifies the store with a signed webhook.
 
-The two default modes need **no server**, just your WordPress + a Monero node. Requires the PHP **GMP** extension. Full guide: the FAQ at https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/FAQ.md
+The two default modes need **no server**, just your WordPress + a Monero node. Requires the PHP **GMP** and **BCMath** extensions. Full guide: the FAQ at https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/FAQ.md
 
 = Pricing =
 
@@ -40,7 +40,7 @@ Price natively in XMR (set your store currency to XMR, no feed needed), or price
 
 Default (no server, recommended):
 
-1. **Install this plugin**: upload the `xmr-pay-for-woocommerce` folder to `wp-content/plugins/`, or install the zip from *Plugins > Add New > Upload*. Activate it (WooCommerce must be active). Your host needs the PHP **GMP** extension.
+1. **Install this plugin**: upload the `xmr-pay-for-woocommerce` folder to `wp-content/plugins/`, or install the zip from *Plugins > Add New > Upload*. Activate it (WooCommerce must be active). Your host needs the PHP **GMP** and **BCMath** extensions.
 2. **Configure**: WooCommerce > Settings > Payments > **Monero (xmr-pay)**. Pick a mode (**Auto-detect in WordPress** is recommended), then set your **Monero address**, **private view key**, and a **Monero node** URL. For confirmations, `1` is a good default.
 3. (More private) Instead of pasting the view key, put `define( 'XMRPAY_VIEW_KEY', '…' );` in `wp-config.php`.
 4. Test on **stagenet** first, then switch to your mainnet wallet.
@@ -56,7 +56,7 @@ No. Payments go to your own wallet. No spend key ever lives in WordPress, so no 
 No. The default modes verify payments **inside WordPress itself** (pure PHP, against a public Monero node), nothing to run 24/7. Agent mode (running the separate `xmr-pay` daemon) is optional, for merchants who prefer it.
 
 = What do I need? =
-A Monero address, a Monero node URL (a public one is fine), and, for the auto-detect / "I've paid" modes, your wallet's private view key and the PHP **GMP** extension. That's it.
+A Monero address, a Monero node URL (a public one is fine), and, for the auto-detect / "I've paid" modes, your wallet's private view key and the PHP **GMP** and **BCMath** extensions. That's it.
 
 = How are refunds handled? =
 Monero is non-custodial and a transaction does not reveal the sender, so refunds are **manual**: the plugin records the refund in WooCommerce and adds a note reminding you to send the XMR back to a receive address the customer gives you.
@@ -98,7 +98,7 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 * The order's **confirmation count now updates while the payment is maturing**, the admin shows progress ("received, N confirmations") before the order settles, not just the final value. (The buyer's checkout page already updated live.)
 
 = 0.1.6 (beta) =
-* **No-server modes, accept Monero with no external agent.** The plugin can now verify payments in **pure PHP** (vendored Monero crypto: ed25519, Keccak, base58), in two new modes: **Auto-detect** (a view-only watch over your address + node) and **"I've paid"** (the buyer pastes a transaction ID, verified on-chain). The advanced **Agent** mode is still there. The no-server modes need the **GMP** PHP extension (most hosts have it, or can enable it).
+* **No-server modes, accept Monero with no external agent.** The plugin can now verify payments in **pure PHP** (vendored Monero crypto: ed25519, Keccak, base58), in two new modes: **Auto-detect** (a view-only watch over your address + node) and **"I've paid"** (the buyer pastes a transaction ID, verified on-chain). The advanced **Agent** mode is still there. The no-server modes need the **GMP** and **BCMath** PHP extensions (most hosts have both, or can enable them).
 * **Mode-aware setup wizard** with a live **"Check setup"**, confirms the node is reachable, the network matches your address, and your **view key actually belongs to the address** before you go live.
 * **Pricing your way.** Fixed-rate fallback when a feed is down, and you can point at **your own price-source URL** (JSON) instead of CoinGecko. The custom URL is fetched with SSRF protection.
 * **Fix:** the setup wizard (and the post-activation redirect) could return *"Sorry, you are not allowed to access this page."*, the hidden admin page is now registered so direct access works.

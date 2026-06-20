@@ -622,22 +622,23 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 		if ( $this->uses_view_key() ) {
 			// no-server modes (proof + watch) are ready once address + view key are set —
-			// and require GMP (the PHP verifier needs it; without it order completion would
-			// fatal AFTER the buyer paid, so we hide the gateway instead). See admin notice.
+			// and require both GMP and BCMath (the PHP verifier needs them; without either,
+			// order completion would fatal AFTER the buyer paid, so we hide the gateway
+			// instead). See maybe_warn_gmp() + XmrPay_Util::crypto_ready().
 			return '' !== trim( (string) $this->get_option( 'xmr_address' ) )
 				&& '' !== $this->view_key()
-				&& extension_loaded( 'gmp' );
+				&& XmrPay_Util::crypto_ready();
 		}
 		return '' !== trim( (string) $this->get_option( 'agent_url' ) );
 	}
 
-	/** Warn in wp-admin if a no-server mode is selected but PHP lacks the GMP extension. */
+	/** Warn in wp-admin if a no-server mode is selected but PHP lacks GMP or BCMath. */
 	public function maybe_warn_gmp() {
-		if ( ! $this->uses_view_key() || extension_loaded( 'gmp' ) ) {
+		if ( ! $this->uses_view_key() || XmrPay_Util::crypto_ready() ) {
 			return;
 		}
 		echo '<div class="notice notice-error"><p><strong>xmr-pay:</strong> '
-			. esc_html__( 'The selected Monero mode verifies payments in PHP and needs the GMP extension, which is not installed. The Monero gateway is hidden until your host enables ext-gmp (or switch to Agent mode).', 'xmr-pay-for-woocommerce' )
+			. esc_html__( 'The selected Monero mode verifies payments in PHP and needs the GMP and BCMath extensions, one of which is not installed. The Monero gateway is hidden until your host enables ext-gmp and ext-bcmath (or switch to Agent mode).', 'xmr-pay-for-woocommerce' )
 			. '</p></div>';
 	}
 
@@ -668,8 +669,8 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( ! current_user_can( 'manage_woocommerce' ) || ! check_ajax_referer( 'xmrpay_test_node', '_wpnonce', false ) ) {
 			wp_send_json_error( array( 'msg' => __( 'not allowed', 'xmr-pay-for-woocommerce' ) ) );
 		}
-		if ( ! extension_loaded( 'gmp' ) ) {
-			wp_send_json_error( array( 'msg' => __( 'PHP is missing the GMP extension — ask your host to enable ext-gmp (or use Agent mode).', 'xmr-pay-for-woocommerce' ) ) );
+		if ( ! XmrPay_Util::crypto_ready() ) {
+			wp_send_json_error( array( 'msg' => __( 'PHP is missing the GMP or BCMath extension — ask your host to enable ext-gmp and ext-bcmath (or use Agent mode).', 'xmr-pay-for-woocommerce' ) ) );
 		}
 		$address = isset( $_POST['address'] ) ? sanitize_text_field( wp_unslash( $_POST['address'] ) ) : '';
 		$nodes   = isset( $_POST['nodes'] ) ? sanitize_text_field( wp_unslash( $_POST['nodes'] ) ) : '';
