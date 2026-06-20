@@ -5,7 +5,7 @@
  * No WordPress/WooCommerce calls here, so it runs under plain `php` in tests.
  */
 
-if ( ! defined( 'ABSPATH' ) && ! defined( 'XMRPAY_TESTING' ) ) { exit; }
+if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class XmrPay_Util {
 
@@ -66,17 +66,17 @@ class XmrPay_Util {
 	 * buyer sees barely moves; on-chain it's unmistakable. Integer math throughout —
 	 * the nonce is added in piconero space so no float tail can swallow it.
 	 */
-	public static function nonce_amount( $xmr, $digits = 6 ) {
+	public static function nonce_amount( $xmr, $digits = 9 ) {
 		$digits = (int) $digits;
-		if ( $digits < 1 || $digits > 8 ) {
-			$digits = 6;
+		if ( $digits < 1 || $digits > 12 ) {
+			$digits = 9;
 		}
 		$base = self::xmr_to_pico( $xmr );
 		if ( $base <= 0 ) {
 			return '0';
 		}
 		$span  = ( 10 ** $digits ) - 1;          // nonce in 1..span piconero
-		$nonce = function_exists( 'random_int' ) ? random_int( 1, $span ) : mt_rand( 1, $span );
+		$nonce = random_int( 1, $span );         // CSPRNG, guaranteed on PHP 7+
 		return self::pico_to_string( $base + $nonce );
 	}
 
@@ -173,9 +173,19 @@ class XmrPay_Util {
 	 * now — so re-pointing the agent at mainnet without re-testing disables it,
 	 * instead of riding a stale flag onto a live store.
 	 */
-	public static function test_amount_allowed( $network, $tested_url, $agent_url ) {
+	public static function test_amount_allowed( $network, $tested_url, $agent_url, $address = '' ) {
 		if ( ! in_array( $network, array( 'stagenet', 'testnet' ), true ) ) {
 			return false;
+		}
+		// cross-check: if the stored address prefix contradicts the stored network a
+		// merchant swapped from stagenet to mainnet at the same URL without re-testing.
+		// stagenet addresses start with 5/7, mainnet with 4/8, testnet with 9/A/B.
+		if ( '' !== $address ) {
+			$first           = $address[0];
+			$is_test_address = in_array( $first, array( '5', '7', '9', 'A', 'B' ), true );
+			if ( ! $is_test_address ) {
+				return false; // mainnet address but stagenet flag — test_amount must not fire
+			}
 		}
 		$tested = rtrim( trim( (string) $tested_url ), '/' );
 		$agent  = rtrim( trim( (string) $agent_url ), '/' );
@@ -187,11 +197,128 @@ class XmrPay_Util {
 	 * the order key out of a third-party post-payment redirect.
 	 */
 	public static function same_origin( $url, $home ) {
-		$h = parse_url( (string) $url, PHP_URL_HOST );
+		$h = wp_parse_url( (string) $url, PHP_URL_HOST );
 		if ( empty( $h ) ) {
 			return true;
 		}
-		$hh = parse_url( (string) $home, PHP_URL_HOST );
+		$hh = wp_parse_url( (string) $home, PHP_URL_HOST );
 		return strtolower( $h ) === strtolower( (string) $hh );
+	}
+
+	/** A row's amount as a non-negative GMP; a malformed/empty/negative value reads as 0. */
+	private static function row_amt_pico( $row ) {
+		$v = isset( $row['amount_atomic'] ) ? (string) $row['amount_atomic'] : '0';
+		if ( '' === $v || ! preg_match( '/^-?\d+$/', $v ) ) { return gmp_init( 0 ); }
+		$g = gmp_init( $v, 10 );
+		return gmp_cmp( $g, 0 ) < 0 ? gmp_init( 0 ) : $g;
+	}
+
+	/**
+	 * Of two rows for the SAME txid, the one we can most safely credit — deterministic
+	 * so the verdict never depends on which row arrived first (the WP-native scanner has
+	 * no row-order guarantee). Priority: a committed (proven) copy, then a confirmed
+	 * (not-pool) copy, then more confirmations, then the SMALLER amount (so a duplicate
+	 * that disagrees on value can never settle an order on the larger, bogus claim).
+	 * Mirrors the lib's moreCreditable so both transports agree on what counts as paid.
+	 */
+	private static function more_creditable( $a, $b ) {
+		$ak = ! empty( $a['commitment_ok'] );
+		$bk = ! empty( $b['commitment_ok'] );
+		if ( $ak !== $bk ) { return $ak ? $a : $b; }
+		$ap = ! empty( $a['in_pool'] );
+		$bp = ! empty( $b['in_pool'] );
+		if ( $ap !== $bp ) { return $ap ? $b : $a; }
+		$ac = ( isset( $a['confirmations'] ) && null !== $a['confirmations'] ) ? (int) $a['confirmations'] : -1;
+		$bc = ( isset( $b['confirmations'] ) && null !== $b['confirmations'] ) ? (int) $b['confirmations'] : -1;
+		if ( $ac !== $bc ) { return $ac > $bc ? $a : $b; }
+		$cmp = gmp_cmp( self::row_amt_pico( $a ), self::row_amt_pico( $b ) );
+		if ( 0 !== $cmp ) { return $cmp < 0 ? $a : $b; }
+		return $a;
+	}
+
+	/**
+	 * Collapse rows that share a REAL txid down to one most-creditable copy, ORDER-
+	 * INDEPENDENTLY. The same tx can surface more than once (e.g. a known-txid re-verify
+	 * AND a fresh block-scan hit in the same tick); count it once. An empty/missing txid
+	 * is never a duplicate of another, so each such row is kept.
+	 */
+	public static function dedup_by_txid( $rows ) {
+		if ( ! is_array( $rows ) ) { return array(); }
+		$pos = array();
+		$out = array();
+		foreach ( $rows as $t ) {
+			if ( ! is_array( $t ) || ! isset( $t['txid'] ) || '' === (string) $t['txid'] ) { $out[] = $t; continue; }
+			$k = (string) $t['txid'];
+			if ( ! isset( $pos[ $k ] ) ) { $pos[ $k ] = count( $out ); $out[] = $t; }
+			else { $out[ $pos[ $k ] ] = self::more_creditable( $out[ $pos[ $k ] ], $t ); }
+		}
+		return $out;
+	}
+
+	/**
+	 * Sum every confirmed payment to an order's subaddress and return the settlement
+	 * verdict — the WP-native equivalent of the lib's summarizeTransfers, so a buyer who
+	 * pays in installments (or sends a small test tx then the rest) still completes.
+	 * Only an output whose decoded amount is COMMITTED on-chain (commitment_ok) is ever
+	 * credited. Status vocabulary matches the lib: paid|locked|mempool|partial|pending.
+	 *
+	 * @param array  $rows      [{txid, amount_atomic, confirmations|null, in_pool, locked, commitment_ok}]
+	 * @param string $exp_pico  expected amount in piconero
+	 * @param string $tol_pico  accepted shortfall in piconero (clamped < expected)
+	 * @param int    $min_conf  confirmations required to credit a tx
+	 */
+	public static function summarize_payments( $rows, $exp_pico, $tol_pico, $min_conf ) {
+		$min_conf = max( 0, (int) $min_conf );
+		$rows     = self::dedup_by_txid( is_array( $rows ) ? $rows : array() );
+		$confirmed = gmp_init( 0 );
+		$pending   = gmp_init( 0 );
+		$locked    = gmp_init( 0 );
+		$min_confs = null;
+		$txids     = array();
+		foreach ( $rows as $t ) {
+			// never credit an amount that isn't cryptographically committed on-chain.
+			if ( ! is_array( $t ) || empty( $t['commitment_ok'] ) ) { continue; }
+			$amt = self::row_amt_pico( $t );
+			if ( isset( $t['txid'] ) && '' !== (string) $t['txid'] ) { $txids[] = (string) $t['txid']; }
+			if ( ! empty( $t['locked'] ) ) { $locked = gmp_add( $locked, $amt ); continue; }
+			$confs   = ( isset( $t['confirmations'] ) && null !== $t['confirmations'] ) ? (int) $t['confirmations'] : null;
+			$in_pool = ! empty( $t['in_pool'] );
+			if ( ! $in_pool && null !== $confs && $confs >= $min_conf ) {
+				$confirmed = gmp_add( $confirmed, $amt );
+				$min_confs = ( null === $min_confs ) ? $confs : min( $min_confs, $confs );
+			} else {
+				$pending = gmp_add( $pending, $amt );
+			}
+		}
+
+		$exp = gmp_init( (string) $exp_pico, 10 );
+		$tol = gmp_init( (string) $tol_pico, 10 );
+		if ( gmp_cmp( $tol, 0 ) < 0 ) { $tol = gmp_init( 0 ); }
+		$max_tol = gmp_cmp( $exp, 0 ) <= 0 ? gmp_init( 0 ) : gmp_sub( $exp, gmp_init( 1 ) );
+		if ( gmp_cmp( $tol, $max_tol ) > 0 ) { $tol = $max_tol; }
+		$threshold = gmp_sub( $exp, $tol );
+		$seen      = gmp_add( gmp_add( $confirmed, $pending ), $locked );
+
+		$base = array(
+			'received_pico'  => gmp_strval( $confirmed ),
+			'confirmed_pico' => gmp_strval( $confirmed ),
+			'pending_pico'   => gmp_strval( $pending ),
+			'locked_pico'    => gmp_strval( $locked ),
+			'seen_pico'      => gmp_strval( $seen ),
+			'confirmations'  => ( null === $min_confs ) ? 0 : (int) $min_confs,
+			'txids'          => $txids,
+			'overpaid_pico'  => '0',
+			'shortfall_pico' => gmp_cmp( $threshold, $seen ) > 0 ? gmp_strval( gmp_sub( $threshold, $seen ) ) : '0',
+		);
+
+		if ( gmp_cmp( $exp, 0 ) <= 0 ) { return array_merge( $base, array( 'paid' => false, 'status' => 'invalid' ) ); }
+		if ( gmp_cmp( $confirmed, $threshold ) >= 0 ) {
+			$over = gmp_cmp( $confirmed, $exp ) > 0 ? gmp_strval( gmp_sub( $confirmed, $exp ) ) : '0';
+			return array_merge( $base, array( 'paid' => true, 'status' => 'paid', 'overpaid_pico' => $over, 'shortfall_pico' => '0' ) );
+		}
+		if ( gmp_cmp( gmp_add( $locked, $confirmed ), $threshold ) >= 0 ) { return array_merge( $base, array( 'paid' => false, 'status' => 'locked' ) ); }
+		if ( gmp_cmp( gmp_add( $confirmed, $pending ), $threshold ) >= 0 ) { return array_merge( $base, array( 'paid' => false, 'status' => 'mempool' ) ); }
+		if ( gmp_cmp( $confirmed, 0 ) > 0 || gmp_cmp( $pending, 0 ) > 0 ) { return array_merge( $base, array( 'paid' => false, 'status' => 'partial' ) ); }
+		return array_merge( $base, array( 'paid' => false, 'status' => 'pending' ) );
 	}
 }

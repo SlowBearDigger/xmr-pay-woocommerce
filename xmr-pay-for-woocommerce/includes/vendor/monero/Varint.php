@@ -22,7 +22,7 @@
 */
 namespace MoneroIntegrations\MoneroPhp;
 
-if ( ! defined( 'ABSPATH' ) && ! defined( 'XMRPAY_TESTING' ) ) { exit; } // vendored: no direct web access
+if ( ! defined( 'ABSPATH' ) ) { exit; } // vendored: no direct web access
 
     class Varint
     {

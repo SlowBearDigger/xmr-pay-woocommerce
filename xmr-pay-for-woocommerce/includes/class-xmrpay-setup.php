@@ -74,7 +74,7 @@ class XmrPay_Setup {
 		}
 		delete_transient( self::REDIRECT_T );
 		// don't hijack bulk activations or non-interactive contexts.
-		if ( isset( $_GET['activate-multi'] ) || wp_doing_ajax() || ! current_user_can( 'manage_woocommerce' ) ) {
+		if ( isset( $_GET['activate-multi'] ) || wp_doing_ajax() || ! current_user_can( 'manage_woocommerce' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- presence-only flag check, capability-gated
 			return;
 		}
 		wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE ) );
@@ -134,7 +134,11 @@ class XmrPay_Setup {
 			// constant or a previously-saved value should not be blanked).
 			$vk = $text( 'view_key' );
 			if ( '' !== $vk ) { $cfg['view_key'] = $vk; }
-			$cfg['nodes']          = $text( 'nodes' ) !== '' ? $text( 'nodes' ) : 'http://node2.monerodevs.org:38089';
+			// sanitize each comma-separated node URL with esc_url_raw (preserves port + path, strips XSS chars)
+			$raw_nodes = $text( 'nodes' );
+			$cfg['nodes'] = $raw_nodes !== ''
+				? implode( ', ', array_filter( array_map( 'esc_url_raw', array_map( 'trim', explode( ',', $raw_nodes ) ) ) ) )
+				: 'http://node2.monerodevs.org:38089';
 			$cfg['proof_min_conf'] = is_numeric( $text( 'proof_min_conf' ) ) ? (string) max( 0, (int) $text( 'proof_min_conf' ) ) : '1';
 		}
 

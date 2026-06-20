@@ -143,6 +143,7 @@
 	var box = document.querySelector('.xmrpay-proof[data-verify]');
 	if (!box) { return; }
 	var url = box.getAttribute('data-verify');
+	var nonce = box.getAttribute('data-nonce') || '';
 	var btn = box.querySelector('#xmrpay-verify-btn');
 	var inp = box.querySelector('#xmrpay-txid');
 	var msg = box.querySelector('#xmrpay-proof-msg');
@@ -153,7 +154,7 @@
 		var txid = (inp.value || '').trim().toLowerCase();
 		if (!/^[0-9a-f]{64}$/.test(txid)) { say(L.pBadTxid || 'Invalid transaction ID', '#b91c1c'); inp.focus(); return; }
 		btn.disabled = true; say(L.pChecking || 'Checking…', '#b45309');
-		var fd = new FormData(); fd.append('txid', txid);
+		var fd = new FormData(); fd.append('txid', txid); fd.append('_wpnonce', nonce);
 		fetch(url, { method: 'POST', body: fd })
 			.then(function (r) { return r.json(); })
 			.then(function (d) {

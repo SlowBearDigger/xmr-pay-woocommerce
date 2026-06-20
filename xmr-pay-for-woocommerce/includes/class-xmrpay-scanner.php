@@ -20,7 +20,7 @@
  * Requires GMP for usable speed (BCMath fallback works but is ~10x slower).
  */
 
-if ( ! defined( 'ABSPATH' ) && ! defined( 'XMRPAY_TESTING' ) ) { exit; }
+if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 require_once __DIR__ . '/vendor/monero/load.php';
 
@@ -53,11 +53,12 @@ class XmrPay_Scanner {
 	private function node_rpc( $path, $body ) {
 		$url     = $this->node . $path;
 		$payload = function_exists( 'wp_json_encode' ) ? wp_json_encode( $body ) : json_encode( $body );
-		if ( function_exists( 'wp_remote_post' ) ) {
-			$res = wp_remote_post( $url, array(
-				'timeout' => $this->http_timeout,
-				'headers' => array( 'Content-Type' => 'application/json' ),
-				'body'    => $payload,
+		if ( function_exists( 'wp_safe_remote_post' ) ) {
+			$res = wp_safe_remote_post( $url, array(
+				'timeout'             => $this->http_timeout,
+				'headers'             => array( 'Content-Type' => 'application/json' ),
+				'body'                => $payload,
+				'limit_response_size' => 4 * 1024 * 1024, // 4 MB — a real Monero RPC response is ≤ 1 MB
 			) );
 			if ( is_wp_error( $res ) ) {
 				return null;
@@ -66,9 +67,15 @@ class XmrPay_Scanner {
 			if ( $code < 200 || $code >= 300 ) {
 				return null;
 			}
-			return json_decode( wp_remote_retrieve_body( $res ), true );
+			$raw = wp_remote_retrieve_body( $res );
+			if ( strlen( $raw ) > 4 * 1024 * 1024 ) { return null; }
+			return json_decode( $raw, true );
 		}
-		// test / non-WP fallback
+		// test / non-WP fallback — restrict to http(s) so file:// / data: can never
+		// reach the filesystem even in XMRPAY_TESTING environments.
+		if ( ! in_array( strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ), array( 'http', 'https' ), true ) ) {
+			return null;
+		}
 		$ctx = stream_context_create( array( 'http' => array(
 			'method'        => 'POST',
 			'header'        => "Content-Type: application/json\r\n",
@@ -102,7 +109,10 @@ class XmrPay_Scanner {
 	/** Fetch + decode ONE transaction. Returns the as_json array or null. */
 	public function fetch_tx( $txid ) {
 		$txs = $this->fetch_txs( array( $txid ) );
-		return ( is_array( $txs ) && isset( $txs[0] ) ) ? $txs[0] : null;
+		if ( ! is_array( $txs ) || ! isset( $txs[0] ) ) { return null; }
+		// cross-check: reject a node that returns a different tx than requested.
+		if ( strcasecmp( (string) $txs[0]['_txid'], (string) $txid ) !== 0 ) { return null; }
+		return $txs[0];
 	}
 
 	/** Monero daemon json_rpc call (POST /json_rpc). Returns the `result` array or null. */
@@ -160,10 +170,18 @@ class XmrPay_Scanner {
 	}
 	private function node_rpc_get( $path ) {
 		$url = $this->node . $path;
-		if ( function_exists( 'wp_remote_get' ) ) {
-			$res = wp_remote_get( $url, array( 'timeout' => $this->http_timeout ) );
+		if ( function_exists( 'wp_safe_remote_get' ) ) {
+			$res = wp_safe_remote_get( $url, array(
+				'timeout'             => $this->http_timeout,
+				'limit_response_size' => 4 * 1024 * 1024,
+			) );
 			if ( is_wp_error( $res ) ) { return null; }
-			return json_decode( wp_remote_retrieve_body( $res ), true );
+			$raw = wp_remote_retrieve_body( $res );
+			if ( strlen( $raw ) > 4 * 1024 * 1024 ) { return null; }
+			return json_decode( $raw, true );
+		}
+		if ( ! in_array( strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ), array( 'http', 'https' ), true ) ) {
+			return null;
 		}
 		$raw = @file_get_contents( $url );
 		return $raw === false ? null : json_decode( $raw, true );
@@ -183,7 +201,7 @@ class XmrPay_Scanner {
 				$len = $this->read_varint( $extra_bytes, $pos, $n );
 				$pos = min( $n, $pos + $len );                       // nonce/payment-id — clamp, never overshoot
 			} elseif ( 4 === $tag ) {
-				$cnt = $this->read_varint( $extra_bytes, $pos, $n );
+				$cnt = min( $this->read_varint( $extra_bytes, $pos, $n ), 256 ); // a valid tx has ≤ output-count keys
 				for ( $k = 0; $k < $cnt; $k++ ) {
 					$h = $this->take_hex( $extra_bytes, $pos, 32, $n );
 					if ( null === $h ) { break 2; }                  // truncated additional list — stop
@@ -285,26 +303,35 @@ class XmrPay_Scanner {
 		$C_spend = $dec['spendKey'];
 		$extra = $this->parse_extra( isset( $tx['extra'] ) ? $tx['extra'] : array() );
 		$vout  = isset( $tx['vout'] ) ? $tx['vout'] : array();
+		if ( count( $vout ) > 256 ) { return null; } // guard: a real Monero tx has ≤ 16 outputs; 256 is already generous
 		$ecdh  = isset( $tx['rct_signatures']['ecdhInfo'] ) ? $tx['rct_signatures']['ecdhInfo'] : array();
 		$outpk = isset( $tx['rct_signatures']['outPk'] ) ? $tx['rct_signatures']['outPk'] : ( isset( $tx['rctsig_prunable']['outPk'] ) ? $tx['rctsig_prunable']['outPk'] : array() );
 		for ( $i = 0; $i < count( $vout ); $i++ ) {
-			$t       = $vout[ $i ]['target'];
+			$t       = ( isset( $vout[ $i ]['target'] ) && is_array( $vout[ $i ]['target'] ) ) ? $vout[ $i ]['target'] : array();
 			$out_key = isset( $t['key'] ) ? $t['key'] : ( isset( $t['tagged_key']['key'] ) ? $t['tagged_key']['key'] : null );
 			if ( ! $out_key ) { continue; }
 			$candidates = array();
 			if ( isset( $extra['additional'][ $i ] ) ) { $candidates[] = $extra['additional'][ $i ]; }
 			if ( $extra['main'] ) { $candidates[] = $extra['main']; }
 			foreach ( $candidates as $R ) {
-				$derivation = $this->cn->gen_key_derivation( $R, $view_key );
-				if ( $this->cn->derive_public_key( $derivation, $i, $C_spend ) !== $out_key ) { continue; }
-				$amt_hex       = isset( $ecdh[ $i ]['amount'] ) ? $ecdh[ $i ]['amount'] : '';
-				$amount_atomic = '' !== $amt_hex ? $this->decode_amount( $derivation, $i, $amt_hex ) : '0';
-				$commitment    = $this->outpk_mask( $outpk, $i );
-				return array(
-					'output_index'  => $i,
-					'amount_atomic' => $amount_atomic,
-					'commitment_ok' => $commitment ? $this->check_commitment( $amount_atomic, $derivation, $i, $commitment ) : false,
-				);
+				// a tx pubkey that is not a valid curve point (ed25519 decodepoint throws),
+				// or any crypto error on a malformed output, must NOT crash the scan — a
+				// single hostile tx in a scanned block would otherwise abort the whole loop
+				// and stall every pending order. treat a throwing candidate as not-ours.
+				try {
+					$derivation = $this->cn->gen_key_derivation( $R, $view_key );
+					if ( $this->cn->derive_public_key( $derivation, $i, $C_spend ) !== $out_key ) { continue; }
+					$amt_hex       = isset( $ecdh[ $i ]['amount'] ) ? $ecdh[ $i ]['amount'] : '';
+					$amount_atomic = '' !== $amt_hex ? $this->decode_amount( $derivation, $i, $amt_hex ) : '0';
+					$commitment    = $this->outpk_mask( $outpk, $i );
+					return array(
+						'output_index'  => $i,
+						'amount_atomic' => $amount_atomic,
+						'commitment_ok' => $commitment ? $this->check_commitment( $amount_atomic, $derivation, $i, $commitment ) : false,
+					);
+				} catch ( \Throwable $e ) {
+					continue;
+				}
 			}
 		}
 		return null;
@@ -391,6 +418,53 @@ class XmrPay_Scanner {
 			$last = $h;
 		}
 		return array( 'found' => false, 'scanned_to' => $last );
+	}
+
+	/**
+	 * Same bounded block scan as scan(), but collects EVERY matching payment in the
+	 * window instead of returning the first. Returns ['matches'=>[ row, ... ], 'scanned_to'=>h]
+	 * where each row is {txid, amount_atomic, confirmations, in_pool:false, locked, commitment_ok,
+	 * block_height} — the shape XmrPay_Util::summarize_payments sums. Lets WP-native mode
+	 * settle an order paid across multiple txs (installments / a test tx then the rest).
+	 */
+	public function scan_all( $address, $view_key, $from_height, $to_height, $opts = array() ) {
+		$max_blocks = isset( $opts['max_blocks'] ) ? max( 1, (int) $opts['max_blocks'] ) : 30;
+		$budget_s   = isset( $opts['time_budget'] ) ? (float) $opts['time_budget'] : 8.0;
+		$req_commit = isset( $opts['require_commitment'] ) ? (bool) $opts['require_commitment'] : true;
+		$tip        = isset( $opts['tip'] ) ? (int) $opts['tip'] : (int) $to_height;
+		$start      = microtime( true );
+		$h          = (int) $from_height;
+		$end        = min( (int) $to_height, $h + $max_blocks - 1 );
+		$last       = $h - 1;
+		$matches    = array();
+		for ( ; $h <= $end; $h++ ) {
+			if ( ( microtime( true ) - $start ) > $budget_s ) { break; }
+			$hashes = $this->block_tx_hashes( $h );
+			if ( null === $hashes ) { break; }                 // node hiccup — resume next tick
+			foreach ( array_chunk( $hashes, 50 ) as $batch ) {
+				$txs = $this->fetch_txs( $batch );
+				if ( null === $txs ) { return array( 'matches' => $matches, 'scanned_to' => $last ); }
+				foreach ( $txs as $tx ) {
+					$m = $this->detect_in_tx( $tx, $address, $view_key );
+					if ( null === $m ) { continue; }
+					if ( $req_commit && empty( $m['commitment_ok'] ) ) { continue; }
+					$bh   = isset( $tx['_block_height'] ) ? (int) $tx['_block_height'] : $h;
+					$conf = max( 0, $tip - $bh );
+					$matches[] = array(
+						'txid'          => isset( $tx['_txid'] ) ? $tx['_txid'] : '',
+						'amount_atomic' => $m['amount_atomic'],
+						'output_index'  => $m['output_index'],
+						'confirmations' => $conf,
+						'in_pool'       => false,
+						'locked'        => $this->is_locked( isset( $tx['unlock_time'] ) ? $tx['unlock_time'] : 0, $bh, $conf, $tip ),
+						'commitment_ok' => $m['commitment_ok'],
+						'block_height'  => $bh,
+					);
+				}
+			}
+			$last = $h;
+		}
+		return array( 'matches' => $matches, 'scanned_to' => $last );
 	}
 
 	/** outPk[i] commitment as 32-byte hex (it may be a string or a {mask:...} object). */

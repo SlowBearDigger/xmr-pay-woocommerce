@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       xmr-pay for WooCommerce
  * Plugin URI:        https://github.com/SlowBearDigger/xmr-pay
- * Description:        Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. A thin client of your own xmr-pay scanner-agent (no Monero crypto in PHP, no third party).
- * Version:           0.1.8-beta
+ * Description:        Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. Verifies payments in pure PHP against a Monero node (no backend), or via your own xmr-pay agent. No third party in the payment path.
+ * Version:           1.0.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            SlowBearDigger
@@ -15,7 +15,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'XMRPAY_WC_VERSION', '0.1.8-beta' );
+define( 'XMRPAY_WC_VERSION', '1.0.0' );
 define( 'XMRPAY_WC_FILE', __FILE__ );
 
 // Declare HPOS (High-Performance Order Storage) compatibility.

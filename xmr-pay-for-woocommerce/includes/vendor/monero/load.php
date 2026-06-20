@@ -21,7 +21,7 @@
  * Requires the GMP extension for usable speed (BCMath fallback works but is ~10x slower).
  */
 
-if ( ! defined( 'ABSPATH' ) && ! defined( 'XMRPAY_TESTING' ) ) { exit; }
+if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 $xmrpay_vendor = __DIR__;
 require_once $xmrpay_vendor . '/Keccak.php';     // kornrunner\Keccak
