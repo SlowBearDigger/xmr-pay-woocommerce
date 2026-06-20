@@ -5,7 +5,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -84,6 +84,11 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 
 == Changelog ==
 
+= 1.0.1 =
+* **Security: burning-bug defence.** The no-server scanner now deduplicates payments by the one-time output key, not by the transaction id. Two outputs that share a one-time key (a 2018-style burn, even across different transactions) are at most one spendable output, so they can never credit an order twice.
+* **Requires both GMP and BCMath.** The pure-PHP verifier needs the BCMath extension (for base58) in addition to GMP (for the money math). The gateway now hides itself, and the settings warn, on a host missing either one, instead of failing after a buyer paid.
+* Hardened the settlement math to be fully order-independent (a duplicate that disagrees on lock status can never change the verdict by row order).
+
 = 1.0.0 =
 * **First stable release.** The no-server (pure-PHP) and agent modes are both production-tested with an adversarial test suite (order-independence, dedup, byzantine duplicates, false-paid hunting).
 * **No-server mode now sums multiple payments.** A buyer who pays in installments, or sends a small test transaction then the rest, now completes automatically once the total reaches the price, matching the agent mode. Previously the WP-native scanner tracked only the first transaction.
@@ -132,6 +137,9 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 * First public beta. Gateway (classic + Blocks), HPOS support, XMR-native + CoinGecko/fixed pricing, live on-chain progress + top-up, signed HMAC webhooks, exact piconero math, "Test connection", order payment meta box, debug logging.
 
 == Upgrade Notice ==
+
+= 1.0.1 =
+Security hardening: burning-bug defence (dedup by output key), requires the BCMath extension alongside GMP, and fully order-independent settlement. Recommended for all no-server installs.
 
 = 1.0.0 =
 First stable release. No-server mode now sums installment/top-up payments and never strands partial funds. No store reconfiguration needed.
