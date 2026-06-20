@@ -51,6 +51,15 @@ $a = verdict_str( XmrPay_Util::summarize_payments( $rows, '100', '0', 1 ) );
 $b = verdict_str( XmrPay_Util::summarize_payments( array_reverse( $rows ), '100', '0', 1 ) );
 ok( 'order-independence: reversing the rows is the same verdict', $a === $b, "$a  vs  $b" );
 
+// ── 3b. ORDER-INDEPENDENCE on LOCK STATUS (the regression fast-check caught in the lib) ──
+// two copies of one txid that differ ONLY in lock status must dedup deterministically:
+// the conservative (locked) reading wins regardless of order, so neither order pays.
+$la = row( 'L', 100, array( 'locked' => true ) );
+$lb = row( 'L', 100, array( 'locked' => false ) );
+$x  = verdict_str( XmrPay_Util::summarize_payments( array( $la, $lb ), '100', '0', 1 ) );
+$y  = verdict_str( XmrPay_Util::summarize_payments( array( $lb, $la ), '100', '0', 1 ) );
+ok( 'order-independence: same txid differing only in lock → same verdict (held locked)', $x === $y && strpos( $x, 'locked' ) !== false, "$x  vs  $y" );
+
 // ── 4. IN/POOL DEDUP: same txid as confirmed AND pool → counted once, confirmed wins ──
 $conf = row( 't', 50 );
 $pool = row( 't', 50, array( 'in_pool' => true, 'confirmations' => null ) );

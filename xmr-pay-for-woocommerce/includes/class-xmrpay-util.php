@@ -214,12 +214,14 @@ class XmrPay_Util {
 	}
 
 	/**
-	 * Of two rows for the SAME txid, the one we can most safely credit — deterministic
-	 * so the verdict never depends on which row arrived first (the WP-native scanner has
-	 * no row-order guarantee). Priority: a committed (proven) copy, then a confirmed
-	 * (not-pool) copy, then more confirmations, then the SMALLER amount (so a duplicate
-	 * that disagrees on value can never settle an order on the larger, bogus claim).
-	 * Mirrors the lib's moreCreditable so both transports agree on what counts as paid.
+	 * Of two rows for the SAME txid, the one we can most safely credit. A TOTAL order over
+	 * every field that changes the verdict, so the result (and the verdict) never depends on
+	 * which row arrived first (the WP-native scanner has no row-order guarantee). Every
+	 * tie-break is the CONSERVATIVE reading, so contradictory node data is never credited:
+	 * a committed (proven) copy, then a confirmed (not-pool) copy, then more confirmations,
+	 * then a time-locked copy (contradictory lock status is treated as still locked), then
+	 * the SMALLER amount (a duplicate that disagrees on value can never settle on the larger,
+	 * bogus claim). Mirrors the lib's moreCreditable so both transports agree on what is paid.
 	 */
 	private static function more_creditable( $a, $b ) {
 		$ak = ! empty( $a['commitment_ok'] );
@@ -231,6 +233,9 @@ class XmrPay_Util {
 		$ac = ( isset( $a['confirmations'] ) && null !== $a['confirmations'] ) ? (int) $a['confirmations'] : -1;
 		$bc = ( isset( $b['confirmations'] ) && null !== $b['confirmations'] ) ? (int) $b['confirmations'] : -1;
 		if ( $ac !== $bc ) { return $ac > $bc ? $a : $b; }
+		$al = ! empty( $a['locked'] );
+		$bl = ! empty( $b['locked'] );
+		if ( $al !== $bl ) { return $al ? $a : $b; }   // contradictory lock status -> keep LOCKED (conservative)
 		$cmp = gmp_cmp( self::row_amt_pico( $a ), self::row_amt_pico( $b ) );
 		if ( 0 !== $cmp ) { return $cmp < 0 ? $a : $b; }
 		return $a;
