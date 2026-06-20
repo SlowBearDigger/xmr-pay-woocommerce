@@ -328,6 +328,7 @@ class XmrPay_Scanner {
 					return array(
 						'output_index'  => $i,
 						'amount_atomic' => $amount_atomic,
+						'out_key'       => $out_key,   // one-time output key (P): the burning-bug dedup key
 						'commitment_ok' => $commitment ? $this->check_commitment( $amount_atomic, $derivation, $i, $commitment ) : false,
 					);
 				} catch ( \Throwable $e ) {
@@ -343,7 +344,7 @@ class XmrPay_Scanner {
 		$m = $this->detect_in_tx( $tx, $address, $view_key );
 		if ( null === $m ) { return array( 'found' => false, 'reason' => 'no output to this address' ); }
 		if ( $require_commitment && empty( $m['commitment_ok'] ) ) {
-			return array( 'found' => true, 'amount_atomic' => $m['amount_atomic'], 'output_index' => $m['output_index'], 'commitment_ok' => false, 'reason' => 'commitment mismatch — decoded amount not committed on-chain' );
+			return array( 'found' => true, 'amount_atomic' => $m['amount_atomic'], 'output_index' => $m['output_index'], 'out_key' => isset( $m['out_key'] ) ? $m['out_key'] : '', 'commitment_ok' => false, 'reason' => 'commitment mismatch — decoded amount not committed on-chain' );
 		}
 		$bh   = isset( $tx['_block_height'] ) ? $tx['_block_height'] : null;
 		$conf = ( null !== $bh && null !== $tip && $bh > 0 ) ? max( 0, $tip - $bh ) : ( ! empty( $tx['_in_pool'] ) ? 0 : null );
@@ -354,7 +355,8 @@ class XmrPay_Scanner {
 			'confirmations' => $conf,
 			'in_pool'       => ! empty( $tx['_in_pool'] ),
 			'locked'        => $this->is_locked( isset( $tx['unlock_time'] ) ? $tx['unlock_time'] : 0, $bh, $conf, $tip ),
-			'commitment_ok' => $m['commitment_ok'],
+			'out_key'       => isset( $m['out_key'] ) ? $m['out_key'] : '',
+						'commitment_ok' => $m['commitment_ok'],
 			'reason'        => 'ok',
 		);
 	}
@@ -411,6 +413,7 @@ class XmrPay_Scanner {
 						'confirmations' => $conf,
 						'in_pool'       => false,
 						'locked'        => $this->is_locked( isset( $tx['unlock_time'] ) ? $tx['unlock_time'] : 0, $bh, $conf, $tip ),
+						'out_key'       => isset( $m['out_key'] ) ? $m['out_key'] : '',
 						'commitment_ok' => $m['commitment_ok'],
 						'block_height'  => $bh,
 					);
@@ -458,6 +461,7 @@ class XmrPay_Scanner {
 						'confirmations' => $conf,
 						'in_pool'       => false,
 						'locked'        => $this->is_locked( isset( $tx['unlock_time'] ) ? $tx['unlock_time'] : 0, $bh, $conf, $tip ),
+						'out_key'       => isset( $m['out_key'] ) ? $m['out_key'] : '',
 						'commitment_ok' => $m['commitment_ok'],
 						'block_height'  => $bh,
 					);

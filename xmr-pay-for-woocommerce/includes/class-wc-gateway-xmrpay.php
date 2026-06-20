@@ -434,6 +434,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'confirmations' => array_key_exists( 'confirmations', $r ) ? $r['confirmations'] : null,
 				'in_pool'       => ! empty( $r['in_pool'] ),
 				'locked'        => ! empty( $r['locked'] ),
+				'out_key'       => isset( $r['out_key'] ) ? $r['out_key'] : '',
 				'commitment_ok' => ! empty( $r['commitment_ok'] ),
 			);
 		}
