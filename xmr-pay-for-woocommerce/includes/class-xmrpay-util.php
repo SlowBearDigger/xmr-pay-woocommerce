@@ -24,6 +24,83 @@ class XmrPay_Util {
 	}
 
 	/**
+	 * Map a settlement status (from summarize_payments / classify_payment) to the canonical
+	 * INVOICE state. The exact mirror of the lib's src/state.js toInvoiceState, so both engines
+	 * agree on what state an order is in (pinned identical by the conformance vectors). Returns
+	 * '' for verify-only outcomes that are not invoice transitions (JS returns null). States:
+	 * created | processing | settled | expired | invalid. `settled` latches; `expired` is final;
+	 * partial/underpaid/locked are `processing` (funds in flight, never terminal, never cancel).
+	 */
+	public static function to_invoice_state( $status ) {
+		switch ( (string) $status ) {
+			case 'pending':     return 'created';
+			case 'mempool':
+			case 'unconfirmed':
+			case 'partial':
+			case 'underpaid':
+			case 'locked':      return 'processing';
+			case 'paid':        return 'settled';
+			case 'expired':     return 'expired';
+			case 'invalid':     return 'invalid';
+			default:            return '';   // not an invoice-state transition
+		}
+	}
+
+	/**
+	 * Cheap, dependency-free prefilter: does this look like a Monero address? Base58 charset,
+	 * standard (95) or integrated (106) length. This is the always-available gate (no GMP/BCMath
+	 * needed) for a buyer-supplied refund address; a full checksum check (XmrPay_Scanner::
+	 * address_valid) runs on top when the crypto extensions are present. NOT a substitute for the
+	 * merchant eyeballing the address before sending — Monero payouts are irreversible.
+	 */
+	public static function is_address_like( $addr ) {
+		$addr = trim( (string) $addr );
+		return 1 === preg_match( '/^[1-9A-HJ-NP-Za-km-z]{95}$/', $addr )
+			|| 1 === preg_match( '/^[1-9A-HJ-NP-Za-km-z]{106}$/', $addr );
+	}
+
+	/*
+	 * Refund claim-link expiry — the PHP mirror of the lib's src/refund.js. SAME formula
+	 * (expires_at = opened + window), seconds instead of milliseconds. A claim is `requested`
+	 * -> `address_provided` -> `sent`; only a `requested` claim can expire. window 0 = never.
+	 */
+
+	const DEFAULT_CLAIM_WINDOW_SECS = 604800;   // 7 days
+
+	/** Normalise a configured window (seconds). <=0 -> 0 ("never expires"). */
+	public static function resolve_claim_window( $window_secs ) {
+		if ( null === $window_secs ) {
+			return self::DEFAULT_CLAIM_WINDOW_SECS;
+		}
+		$n = (int) $window_secs;
+		return $n > 0 ? $n : 0;
+	}
+
+	/** Days -> seconds for the human-facing setting. 0 (or less) days = never expires. */
+	public static function claim_window_from_days( $days ) {
+		$d = (int) $days;
+		return $d > 0 ? $d * 86400 : 0;
+	}
+
+	/** Absolute expiry timestamp for a claim opened at $opened with $window_secs. 0 = never. */
+	public static function claim_expires_at( $opened, $window_secs ) {
+		$w = self::resolve_claim_window( $window_secs );
+		return 0 === $w ? 0 : ( (int) $opened ) + $w;
+	}
+
+	/** Is the link dead? Only a still-`requested` claim can expire. */
+	public static function claim_expired( $status, $opened, $window_secs, $now ) {
+		if ( 'requested' !== $status ) {
+			return false;
+		}
+		$exp = self::claim_expires_at( $opened, $window_secs );
+		if ( 0 === $exp ) {
+			return false;
+		}
+		return (int) $now >= $exp;
+	}
+
+	/**
 	 * Canonical XMR decimal string: at most 12 decimals (piconero precision),
 	 * trailing zeros trimmed, never empty. This is what the buyer pays AND what
 	 * the agent is told to expect — one string, so they can never drift.
@@ -287,7 +364,7 @@ class XmrPay_Util {
 	 * Only an output whose decoded amount is COMMITTED on-chain (commitment_ok) is ever
 	 * credited. Status vocabulary matches the lib: paid|locked|mempool|partial|pending.
 	 *
-	 * @param array  $rows      [{txid, out_key, amount_atomic, confirmations|null, in_pool, locked, commitment_ok}]
+	 * @param array  $rows      [{txid, out_key, amount_atomic, confirmations|null, in_pool, locked, double_spend_seen, commitment_ok}]
 	 * @param string $exp_pico  expected amount in piconero
 	 * @param string $tol_pico  accepted shortfall in piconero (clamped < expected)
 	 * @param int    $min_conf  confirmations required to credit a tx
@@ -306,6 +383,9 @@ class XmrPay_Util {
 			$amt = self::row_amt_pico( $t );
 			if ( isset( $t['txid'] ) && '' !== (string) $t['txid'] ) { $txids[] = (string) $t['txid']; }
 			if ( ! empty( $t['locked'] ) ) { $locked = gmp_add( $locked, $amt ); continue; }
+			// a tx the node flags double_spend_seen (a mempool conflict) is never credited toward
+			// settlement — held as pending until it lands in a block, which clears the flag.
+			if ( ! empty( $t['double_spend_seen'] ) ) { $pending = gmp_add( $pending, $amt ); continue; }
 			$confs   = ( isset( $t['confirmations'] ) && null !== $t['confirmations'] ) ? (int) $t['confirmations'] : null;
 			$in_pool = ! empty( $t['in_pool'] );
 			if ( ! $in_pool && null !== $confs && $confs >= $min_conf ) {

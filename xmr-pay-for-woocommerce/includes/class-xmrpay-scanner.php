@@ -33,8 +33,10 @@ class XmrPay_Scanner {
 	const H_POINT = '8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94';
 
 	private $node;
+	private $nodes;
 	private $cn;
 	private $http_timeout;
+	private $network;
 
 	/**
 	 * $network ('mainnet'|'stagenet'|'testnet') only affects subaddress STRING generation
@@ -43,16 +45,34 @@ class XmrPay_Scanner {
 	 * address string. Defaults to mainnet.
 	 */
 	public function __construct( $node, $network = 'mainnet', $http_timeout = 20 ) {
-		$this->node         = rtrim( (string) $node, '/' );
+		// $node is one URL or a comma-separated list. The extras give node_rpc FAILOVER (try each
+		// until one answers) and a conservative tip_height CROSS-CHECK (min height across
+		// responders) — so a lagging or lying node can only DELAY settlement, never bring it
+		// forward. Heavy calls (tx fetch, get_block) inherit failover via node_rpc/json_rpc.
+		$list               = is_array( $node ) ? $node : explode( ',', (string) $node );
+		$this->nodes        = array_values( array_filter( array_map( function ( $u ) { return rtrim( trim( (string) $u ), '/' ); }, $list ) ) );
+		$this->node         = $this->nodes ? $this->nodes[0] : '';
 		$this->http_timeout = (int) $http_timeout;
-		$this->cn           = new Cryptonote( in_array( $network, array( 'mainnet', 'stagenet', 'testnet' ), true ) ? $network : 'mainnet' );
+		$this->network      = in_array( $network, array( 'mainnet', 'stagenet', 'testnet' ), true ) ? $network : 'mainnet';
+		$this->cn           = new Cryptonote( $this->network );
 	}
 
 	/* ------------------------------------------------------------------ *
 	 *  HTTP — uses wp_remote_post under WordPress, a stream fallback in tests
 	 * ------------------------------------------------------------------ */
 	private function node_rpc( $path, $body ) {
-		$url     = $this->node . $path;
+		// FAILOVER: try each configured node until one answers. json_rpc() routes through here, so
+		// get_block / get_info inherit failover too. The commitment check validates tx data
+		// regardless of which node served it, so a failover source can't forge a payment.
+		foreach ( $this->nodes as $node ) {
+			$r = $this->node_rpc_one( $node, $path, $body );
+			if ( null !== $r ) { return $r; }
+		}
+		return null;
+	}
+
+	private function node_rpc_one( $node, $path, $body ) {
+		$url     = $node . $path;
 		$payload = function_exists( 'wp_json_encode' ) ? wp_json_encode( $body ) : json_encode( $body );
 		if ( function_exists( 'wp_safe_remote_post' ) ) {
 			$res = wp_safe_remote_post( $url, array(
@@ -102,6 +122,10 @@ class XmrPay_Scanner {
 			$asjson['_txid']         = isset( $tx['tx_hash'] ) ? $tx['tx_hash'] : '';
 			$asjson['_block_height'] = isset( $tx['block_height'] ) ? (int) $tx['block_height'] : null;
 			$asjson['_in_pool']      = ! empty( $tx['in_pool'] );
+			// the daemon forces this false for on-chain txs and only sets it true for a MEMPOOL tx
+			// whose key images conflict with another pool tx — i.e. a visible double-spend attempt.
+			// only meaningful while in_pool; carried so the 0-conf credit path can refuse it.
+			$asjson['_double_spend_seen'] = ! empty( $tx['double_spend_seen'] );
 			$out[] = $asjson;
 		}
 		return $out;
@@ -145,9 +169,39 @@ class XmrPay_Scanner {
 		);
 	}
 
+	/**
+	 * Is this a structurally valid Monero address? Decodes base58 + verifies the checksum
+	 * (network-agnostic: standard, subaddress, and integrated all pass). Offline — no node
+	 * call. Used to validate a buyer-supplied refund address before the merchant sends. Never
+	 * throws; returns false on anything malformed.
+	 */
+	public function address_valid( $address ) {
+		try {
+			$dec = $this->cn->decode_address( (string) $address );   // throws on bad base58 / checksum
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+		if ( empty( $dec['viewKey'] ) || empty( $dec['spendKey'] ) ) {
+			return false;
+		}
+		// NETWORK GATE: the prefix MUST belong to THIS store's network, so a buyer cannot submit a
+		// valid-checksum address from the WRONG network (e.g. a stagenet address on a mainnet store).
+		// Such an address is unpayable — the merchant's wallet would refuse it — and sending to it
+		// would lose the refund. Bytes mirror the vendored Cryptonote network_prefixes (standard,
+		// integrated, subaddress per network).
+		$valid = array(
+			'mainnet'  => array( '12', '13', '2a' ),   // 18, 19, 42
+			'stagenet' => array( '18', '19', '24' ),   // 24, 25, 36
+			'testnet'  => array( '35', '36', '3f' ),   // 53, 54, 63
+		);
+		$allowed = isset( $valid[ $this->network ] ) ? $valid[ $this->network ] : $valid['mainnet'];
+		$byte    = isset( $dec['networkByte'] ) ? strtolower( (string) $dec['networkByte'] ) : '';
+		return in_array( $byte, $allowed, true );
+	}
+
 	/** Node reachability + network. Returns ['ok'=>bool,'height'=>int|null,'nettype'=>string]. */
 	public function node_info() {
-		$r = $this->node_rpc_get( '/get_info' );
+		$r = $this->node_rpc_get_one( $this->node, '/get_info' );
 		if ( is_array( $r ) ) {
 			$nettype = isset( $r['nettype'] ) ? (string) $r['nettype']
 				: ( ! empty( $r['stagenet'] ) ? 'stagenet' : ( ! empty( $r['testnet'] ) ? 'testnet' : 'mainnet' ) );
@@ -166,11 +220,19 @@ class XmrPay_Scanner {
 	}
 
 	public function tip_height() {
-		$r = $this->node_rpc_get( '/get_height' );
-		return ( $r && isset( $r['height'] ) ) ? (int) $r['height'] : null;
+		// CROSS-CHECK: ask every configured node and take the MINIMUM height among responders.
+		// confirmations = tip - tx_height, so the lowest tip yields the fewest confirmations — a
+		// node that is behind or lying can only DELAY settlement, never accelerate it. null if no
+		// node answered (the caller — scan_order / verify — then declines to act on stale data).
+		$heights = array();
+		foreach ( $this->nodes as $node ) {
+			$r = $this->node_rpc_get_one( $node, '/get_height' );
+			if ( $r && isset( $r['height'] ) && (int) $r['height'] > 0 ) { $heights[] = (int) $r['height']; }
+		}
+		return $heights ? min( $heights ) : null;
 	}
-	private function node_rpc_get( $path ) {
-		$url = $this->node . $path;
+	private function node_rpc_get_one( $node, $path ) {
+		$url = $node . $path;
 		if ( function_exists( 'wp_safe_remote_get' ) ) {
 			$res = wp_safe_remote_get( $url, array(
 				'timeout'             => $this->http_timeout,
@@ -329,6 +391,10 @@ class XmrPay_Scanner {
 						'output_index'  => $i,
 						'amount_atomic' => $amount_atomic,
 						'out_key'       => $out_key,   // one-time output key (P): the burning-bug dedup key
+						// distinguish "no commitment in the tx blob" (a PRUNED node) from "present but
+						// doesn't match" (a real mismatch) — both fail closed, but the buyer/merchant
+						// message differs (pruned → use a full node; mismatch → genuinely invalid).
+						'commitment_present' => ( '' !== (string) $commitment && null !== $commitment ),
 						'commitment_ok' => $commitment ? $this->check_commitment( $amount_atomic, $derivation, $i, $commitment ) : false,
 					);
 				} catch ( \Throwable $e ) {
@@ -344,7 +410,9 @@ class XmrPay_Scanner {
 		$m = $this->detect_in_tx( $tx, $address, $view_key );
 		if ( null === $m ) { return array( 'found' => false, 'reason' => 'no output to this address' ); }
 		if ( $require_commitment && empty( $m['commitment_ok'] ) ) {
-			return array( 'found' => true, 'amount_atomic' => $m['amount_atomic'], 'output_index' => $m['output_index'], 'out_key' => isset( $m['out_key'] ) ? $m['out_key'] : '', 'commitment_ok' => false, 'reason' => 'commitment mismatch — decoded amount not committed on-chain' );
+			$present = ! empty( $m['commitment_present'] );
+			return array( 'found' => true, 'amount_atomic' => $m['amount_atomic'], 'output_index' => $m['output_index'], 'out_key' => isset( $m['out_key'] ) ? $m['out_key'] : '', 'commitment_ok' => false, 'commitment_present' => $present,
+				'reason' => $present ? 'commitment mismatch — decoded amount not committed on-chain' : 'commitment unavailable — the node may be pruned; use a full (non-pruned) node' );
 		}
 		$bh   = isset( $tx['_block_height'] ) ? $tx['_block_height'] : null;
 		$conf = ( null !== $bh && null !== $tip && $bh > 0 ) ? max( 0, $tip - $bh ) : ( ! empty( $tx['_in_pool'] ) ? 0 : null );
@@ -354,6 +422,7 @@ class XmrPay_Scanner {
 			'output_index'  => $m['output_index'],
 			'confirmations' => $conf,
 			'in_pool'       => ! empty( $tx['_in_pool'] ),
+			'double_spend_seen' => ! empty( $tx['_double_spend_seen'] ),
 			'locked'        => $this->is_locked( isset( $tx['unlock_time'] ) ? $tx['unlock_time'] : 0, $bh, $conf, $tip ),
 			'out_key'       => isset( $m['out_key'] ) ? $m['out_key'] : '',
 						'commitment_ok' => $m['commitment_ok'],

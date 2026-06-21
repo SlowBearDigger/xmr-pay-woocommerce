@@ -1,0 +1,35 @@
+# Runs the standalone PHP test suite on every push/PR. These tests need no WordPress or
+# WooCommerce — they exercise the pure money/protocol logic (the PHP mirror of the xmr-pay
+# library) directly. The scanner suite is excluded here because it talks to a live Monero node.
+name: test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['7.4', '8.1', '8.3']
+    name: PHP ${{ matrix.php }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: gmp, bcmath        # the pure-PHP verifier needs both
+          coverage: none
+      - name: run the non-live suite
+        working-directory: xmr-pay-for-woocommerce
+        run: |
+          fail=0
+          for t in state util aggregation crypto refund report gateway stress concurrency invariant-stress; do
+            if [ -f "tests/$t.test.php" ]; then
+              echo "── $t ──"
+              php "tests/$t.test.php" || fail=1
+            fi
+          done
+          exit $fail

@@ -83,6 +83,9 @@ function xmrpay_wc_init() {
 	if ( is_admin() ) {
 		require_once __DIR__ . '/includes/class-xmrpay-setup.php';
 		new XmrPay_Setup();
+		// Monero payments report + CSV export (WooCommerce submenu).
+		require_once __DIR__ . '/includes/class-xmrpay-report.php';
+		new XmrPay_Report();
 	}
 
 	// let merchants price natively in Monero — register XMR as a WooCommerce
