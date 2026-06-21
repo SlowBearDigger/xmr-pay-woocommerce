@@ -5,7 +5,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.1.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -83,6 +83,13 @@ This plugin does **not** track you or your customers, sends **no** analytics, an
 Your Monero **private view key** (used by the no-server modes) stays on your own server, it is never sent to any external service, including the node.
 
 == Changelog ==
+
+= 1.1.0 =
+* **Non-custodial refunds (claim-link).** Refund an order and the buyer gets a link to enter a Monero receive address (a tx never reveals the sender); you pay it by hand and mark it sent. Configurable link expiry with one-click reissue, address + network validation, and a reopen on a later refund so additional money is never stranded. Something BTCPay's Monero plugin cannot do.
+* **Monero payments report + CSV export** under WooCommerce (owed / received / overpaid / confirmations / state / refund status), spreadsheet-formula-injection safe.
+* **Resilient multi-node.** Comma-separated nodes now genuinely fail over, and the block height is cross-checked across them (the lowest is used), so a lagging node can only delay a payment, never confirm it early.
+* **Critical fix:** the order-completion and proof paths used a non-existent WordPress function for their lock; replaced with a real atomic mutex. Also: a watch order is no longer created in an unscannable state when the node is briefly unreachable (the checkout fails cleanly so the buyer retries), a wrong-network refund address is rejected, and a mempool double-spend is never credited.
+* Tested PHP 7.4 / 8.1 / 8.3 in CI.
 
 = 1.0.1 =
 * **Security: burning-bug defence.** The no-server scanner now deduplicates payments by the one-time output key, not by the transaction id. Two outputs that share a one-time key (a 2018-style burn, even across different transactions) are at most one spendable output, so they can never credit an order twice.
