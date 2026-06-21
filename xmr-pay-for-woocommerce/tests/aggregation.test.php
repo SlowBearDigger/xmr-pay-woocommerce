@@ -163,5 +163,15 @@ for ( $iter = 0; $iter < 4000; $iter++ ) {
 }
 ok( "fuzz: confirmed credit never exceeds per-txid max committed total ($counter cases)", $fuzz_ok );
 
+// ── double_spend_seen: a flagged tx is NEVER credited toward settlement (held pending) ──
+$ds = XmrPay_Util::summarize_payments( array( row( 'x', 100, array( 'double_spend_seen' => true ) ) ), '100', '0', 1 );
+ok( 'double_spend_seen tx is not paid (held pending)', $ds['paid'] === false && $ds['received_pico'] === '0' && $ds['pending_pico'] === '100', verdict_str( $ds ) );
+// the SAME tx without the flag settles normally (proves the flag is what blocks it)
+$ok = XmrPay_Util::summarize_payments( array( row( 'x', 100 ) ), '100', '0', 1 );
+ok( 'same tx without the flag settles', $ok['paid'] === true, verdict_str( $ok ) );
+// one good tx + one flagged tx: only the good one counts; total stays short → not paid
+$mix = XmrPay_Util::summarize_payments( array( row( 'good', 60 ), row( 'bad', 40, array( 'double_spend_seen' => true ) ) ), '100', '0', 1 );
+ok( 'flagged tx excluded from the sum (60 of 100) → not paid', $mix['paid'] === false && $mix['received_pico'] === '60', verdict_str( $mix ) );
+
 echo "\n" . ( $fail ? 'FAILED' : 'ALL GREEN' ) . " — $pass passed, $fail failed\n";
 exit( $fail ? 1 : 0 );
