@@ -11,6 +11,14 @@ us.
 > Requires PHP 7.4+ (with the GMP extension for the no-server modes), WordPress 6.2+,
 > WooCommerce 7.0+. HPOS-compatible. MIT licensed.
 
+[![release](https://img.shields.io/github/v/release/SlowBearDigger/xmr-pay-woocommerce?color=blue&label=version)](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest)
+[![tests](https://img.shields.io/github/actions/workflow/status/SlowBearDigger/xmr-pay-woocommerce/test.yml?branch=main&label=tests)](https://github.com/SlowBearDigger/xmr-pay-woocommerce/actions/workflows/test.yml)
+[![server: not required](https://img.shields.io/badge/server-not%20required-brightgreen)](#no-server-it-runs-inside-wordpress)
+[![funds: non-custodial](https://img.shields.io/badge/funds-non--custodial-brightgreen)](#)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+**Quick links:** [Download .zip](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest/download/xmr-pay-for-woocommerce.zip) · [Live demo (stagenet)](https://demo.xmrpay.shop) · [xmr-pay library](https://github.com/SlowBearDigger/xmr-pay) · [Changelog](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases)
+
 ## See it live (stagenet, no real money)
 
 > [live.xmrpay.shop](https://live.xmrpay.shop) : configure the plugin yourself and watch it verify a payment
@@ -23,6 +31,28 @@ This plugin is a standalone install (drop it in, paste your address, done). Unde
 hood it runs on the [xmr-pay library](https://github.com/SlowBearDigger/xmr-pay), the
 same engine published on npm. The two projects are independent and each links the
 other: this README is about the plugin, that one is about the engine underneath.
+
+## How it compares (WooCommerce Monero options)
+
+The other ways to take Monero in WooCommerce are honest, non-custodial projects too. The
+difference is what you have to keep running, and whether anything sits in the verify path.
+
+| | **xmr-pay for WooCommerce** | monerowp (Monero Gateway) | BTCPay Server (WC plugin) |
+|---|---|---|---|
+| Setup | Install plugin, paste your address | Install plugin + run monero-wallet-rpc | Stand up a BTCPay server, then connect WooCommerce |
+| Always-on server / daemon? | **No** — pure PHP inside WordPress | Yes — wallet-rpc on your server | Yes — a full BTCPay server |
+| Verify path | Your node, in pure PHP (no third party) | wallet-rpc, or a public block explorer | Your BTCPay + wallet-rpc |
+| Custody | Non-custodial, view key only | View-only recommended (or hot wallet) | Non-custodial (self-run) |
+| Monero refunds | **Built-in, non-custodial (claim-link)** | Not built-in | Manual (collect a return address) |
+| Dependencies | GMP + BCMath (standard PHP) | wallet-rpc + BCMath | Docker + full stack |
+| Maturity & adoption | New (2026) | Long-standing, but maintenance has slowed | Most mature, multi-coin, battle-tested |
+
+> **Where the others are stronger:** BTCPay Server does far more than accept Monero
+> (multi-coin, point-of-sale, Lightning, accounting) and has years in production; monerowp
+> is the long-standing community plugin many stores already run. xmr-pay for WooCommerce is
+> the newest. Its bet is narrow on purpose: nothing extra to run, payment verified in pure
+> PHP against a node you choose, and non-custodial Monero refunds built in — which neither
+> of the others offers.
 
 ## No server. It runs inside WordPress.
 
