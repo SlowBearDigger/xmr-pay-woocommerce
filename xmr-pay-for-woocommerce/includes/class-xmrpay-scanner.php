@@ -381,9 +381,19 @@ class XmrPay_Scanner {
 				// or any crypto error on a malformed output, must NOT crash the scan — a
 				// single hostile tx in a scanned block would otherwise abort the whole loop
 				// and stall every pending order. treat a throwing candidate as not-ours.
+				// OWNERSHIP test only — a tx pubkey that is not a valid curve point is legitimately
+				// "not ours"; swallow and try the next candidate so one hostile tx never aborts the scan.
 				try {
 					$derivation = $this->cn->gen_key_derivation( $R, $view_key );
-					if ( $this->cn->derive_public_key( $derivation, $i, $C_spend ) !== $out_key ) { continue; }
+					$owned      = ( $this->cn->derive_public_key( $derivation, $i, $C_spend ) === $out_key );
+				} catch ( \Throwable $e ) {
+					continue;
+				}
+				if ( ! $owned ) { continue; }
+				// OWNED. Decode amount + commitment OUTSIDE the ownership swallow: a failure here is
+				// "ours but undecodable" (a pruned node, a malformed blob), NOT "not ours" — surface it
+				// as a fail-closed errored match, never a silent miss that reports the order unpaid.
+				try {
 					$amt_hex       = isset( $ecdh[ $i ]['amount'] ) ? $ecdh[ $i ]['amount'] : '';
 					$amount_atomic = '' !== $amt_hex ? $this->decode_amount( $derivation, $i, $amt_hex ) : '0';
 					$commitment    = $this->outpk_mask( $outpk, $i );
@@ -398,7 +408,15 @@ class XmrPay_Scanner {
 						'commitment_ok' => $commitment ? $this->check_commitment( $amount_atomic, $derivation, $i, $commitment ) : false,
 					);
 				} catch ( \Throwable $e ) {
-					continue;
+					// ours, but amount/commitment could not be decoded — fail closed + visible.
+					return array(
+						'output_index'      => $i,
+						'amount_atomic'     => '0',
+						'out_key'           => $out_key,
+						'commitment_present' => false,
+						'commitment_ok'     => false,
+						'errored'           => true,
+					);
 				}
 			}
 		}
