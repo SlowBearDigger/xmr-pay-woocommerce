@@ -5,7 +5,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -83,6 +83,9 @@ This plugin does **not** track you or your customers, sends **no** analytics, an
 Your Monero **private view key** (used by the no-server modes) stays on your own server, it is never sent to any external service, including the node.
 
 == Changelog ==
+
+= 1.1.1 =
+* **Fix (payment detection):** the per-output scan loop wrapped ownership AND amount/commitment decoding in one catch, so an error while decoding an output that IS yours (e.g. a pruned node, a malformed blob) was indistinguishable from "not yours" and could report a real payment as unpaid. Ownership and decoding are now separated: an undecodable but owned output fails closed and is surfaced (found-but-unverified), never silently missed. Hardening only; no settings or data change.
 
 = 1.1.0 =
 * **Non-custodial refunds (claim-link).** Refund an order and the buyer gets a link to enter a Monero receive address (a tx never reveals the sender); you pay it by hand and mark it sent. Configurable link expiry with one-click reissue, address + network validation, and a reopen on a later refund so additional money is never stranded. Something BTCPay's Monero plugin cannot do.
