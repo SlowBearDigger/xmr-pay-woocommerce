@@ -55,6 +55,29 @@ class XmrPay_Scanner {
 		$this->http_timeout = (int) $http_timeout;
 		$this->network      = in_array( $network, array( 'mainnet', 'stagenet', 'testnet' ), true ) ? $network : 'mainnet';
 		$this->cn           = new Cryptonote( $this->network );
+		$this->allow_node_ports();
+	}
+
+	/**
+	 * WordPress's wp_safe_remote_* permits only a short port allowlist (80, 443, 8080, ...) as an
+	 * SSRF guard, which silently BLOCKS Monero RPC ports such as 18081 (mainnet) / 38089 (stagenet)
+	 * — the setup wall merchants hit pointing at a remote node (it just times out / fails). Whitelist
+	 * ONLY the ports of the merchant's OWN configured nodes, so the safe-http guard still protects
+	 * every other host and port. No-op outside WordPress (the stream fallback ignores this list).
+	 */
+	private function allow_node_ports() {
+		static $added = false;
+		if ( $added || ! function_exists( 'add_filter' ) ) { return; }
+		$ports = array();
+		foreach ( $this->nodes as $n ) {
+			$p = (int) wp_parse_url( $n, PHP_URL_PORT );
+			if ( $p > 0 ) { $ports[] = $p; }
+		}
+		if ( empty( $ports ) ) { return; }
+		add_filter( 'http_allowed_safe_ports', function ( $allowed ) use ( $ports ) {
+			return array_values( array_unique( array_merge( array_map( 'intval', (array) $allowed ), $ports ) ) );
+		} );
+		$added = true;
 	}
 
 	/* ------------------------------------------------------------------ *
