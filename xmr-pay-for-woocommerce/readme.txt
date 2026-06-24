@@ -5,7 +5,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -83,6 +83,9 @@ This plugin does **not** track you or your customers, sends **no** analytics, an
 Your Monero **private view key** (used by the no-server modes) stays on your own server, it is never sent to any external service, including the node.
 
 == Changelog ==
+
+= 1.1.2 =
+* **Fix (remote node setup):** WordPress's `wp_safe_remote_*` only allows a short list of ports and silently blocks Monero RPC ports like 18081 (mainnet) / 38089 (stagenet), so pointing the plugin at a remote node failed until you hand-added an `http_allowed_safe_ports` filter. The plugin now whitelists the ports of YOUR configured node(s) automatically (and only those — the safe-HTTP SSRF guard still protects every other host/port). Thanks to the tester who reported this. No settings change.
 
 = 1.1.1 =
 * **Fix (payment detection):** the per-output scan loop wrapped ownership AND amount/commitment decoding in one catch, so an error while decoding an output that IS yours (e.g. a pruned node, a malformed blob) was indistinguishable from "not yours" and could report a real payment as unpaid. Ownership and decoding are now separated: an undecodable but owned output fails closed and is surfaced (found-but-unverified), never silently missed. Hardening only; no settings or data change.
