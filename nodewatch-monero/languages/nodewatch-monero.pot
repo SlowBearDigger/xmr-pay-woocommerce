@@ -2,8 +2,8 @@
 # This file is distributed under the MIT.
 msgid ""
 msgstr ""
-"Project-Id-Version: xmr-pay for WooCommerce 0.1.5-beta\n"
-"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/xmr-pay-for-woocommerce\n"
+"Project-Id-Version: Nodewatch Monero Payments for WooCommerce 0.1.5-beta\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/nodewatch-monero\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
@@ -12,25 +12,25 @@ msgstr ""
 "POT-Creation-Date: 2026-06-19T19:24:53+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
-"X-Domain: xmr-pay-for-woocommerce\n"
+"X-Domain: nodewatch-monero\n"
 
 #. Plugin Name of the plugin
-#: xmr-pay-for-woocommerce.php
-msgid "xmr-pay for WooCommerce"
+#: nodewatch-monero.php
+msgid "Nodewatch Monero Payments for WooCommerce"
 msgstr ""
 
 #. Plugin URI of the plugin
-#: xmr-pay-for-woocommerce.php
+#: nodewatch-monero.php
 msgid "https://github.com/SlowBearDigger/xmr-pay"
 msgstr ""
 
 #. Description of the plugin
-#: xmr-pay-for-woocommerce.php
+#: nodewatch-monero.php
 msgid "Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. A thin client of your own xmr-pay scanner-agent (no Monero crypto in PHP, no third party)."
 msgstr ""
 
 #. Author of the plugin
-#: xmr-pay-for-woocommerce.php
+#: nodewatch-monero.php
 msgid "SlowBearDigger"
 msgstr ""
 
@@ -47,7 +47,7 @@ msgstr ""
 #: includes/class-xmrpay-blocks.php:56
 #: includes/class-xmrpay-setup.php:109
 #: includes/class-xmrpay-setup.php:373
-#: xmr-pay-for-woocommerce.php:91
+#: nodewatch-monero.php:91
 msgid "Monero (XMR)"
 msgstr ""
 
@@ -955,58 +955,58 @@ msgstr ""
 msgid "Request failed."
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:31
+#: nodewatch-monero.php:31
 msgid "Every 5 minutes (xmr-pay)"
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:73
-msgid "xmr-pay for WooCommerce needs WooCommerce active."
+#: nodewatch-monero.php:73
+msgid "Nodewatch Monero Payments for WooCommerce needs WooCommerce active."
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:116
+#: nodewatch-monero.php:116
 msgid "Watching"
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:117
+#: nodewatch-monero.php:117
 msgid "Detected"
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:118
+#: nodewatch-monero.php:118
 msgid "Confirming"
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:119
+#: nodewatch-monero.php:119
 msgid "Confirmed"
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:120
+#: nodewatch-monero.php:120
 msgid "Payment confirmed"
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:121
+#: nodewatch-monero.php:121
 msgid "Watching the blockchain for your payment…"
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:122
+#: nodewatch-monero.php:122
 msgid "Payment detected — waiting for the first confirmation."
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:123
+#: nodewatch-monero.php:123
 msgid "Confirming — {c}/{m} confirmations."
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:124
+#: nodewatch-monero.php:124
 msgid "Received {r} XMR — send {s} more (QR updated to the exact amount)."
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:125
+#: nodewatch-monero.php:125
 msgid "Funds received — maturing on-chain…"
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:126
+#: nodewatch-monero.php:126
 msgid "Connecting to the payment scanner…"
 msgstr ""
 
-#: xmr-pay-for-woocommerce.php:127
+#: nodewatch-monero.php:127
 msgid "Latest block"
 msgstr ""

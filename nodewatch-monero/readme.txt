@@ -1,4 +1,4 @@
-=== xmr-pay for WooCommerce ===
+=== Nodewatch Monero Payments for WooCommerce ===
 Contributors: slowbeardigger
 Donate link: https://xmrpay.shop
 Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
@@ -13,7 +13,7 @@ Accept Monero (XMR) in WooCommerce, non-custodial, with no backend. WordPress ve
 
 == Description ==
 
-**xmr-pay for WooCommerce** lets your store accept Monero with **no third party in the payment path** and **no backend to run**. WordPress verifies payments itself, in PHP, against a public Monero node, the plugin never holds funds or a spend key.
+**Nodewatch Monero Payments for WooCommerce** lets your store accept Monero with **no third party in the payment path** and **no backend to run**. WordPress verifies payments itself, in PHP, against a public Monero node, the plugin never holds funds or a spend key.
 
 * **Non-custodial.** Each order is paid to *your* wallet. You control the funds on-chain; no one else can move them.
 * **No backend, no middleman, no API keys, no accounts.** The two default modes do the Monero crypto in pure PHP (vendored, audited), no Node, no `monero-wallet-rpc`, nothing running 24/7. The only external thing needed is a Monero node (a public one is fine); your view key never leaves your server.
@@ -40,8 +40,8 @@ Price natively in XMR (set your store currency to XMR, no feed needed), or price
 
 Default (no server, recommended):
 
-1. **Install this plugin**: upload the `xmr-pay-for-woocommerce` folder to `wp-content/plugins/`, or install the zip from *Plugins > Add New > Upload*. Activate it (WooCommerce must be active). Your host needs the PHP **GMP** and **BCMath** extensions.
-2. **Configure**: WooCommerce > Settings > Payments > **Monero (xmr-pay)**. Pick a mode (**Auto-detect in WordPress** is recommended), then set your **Monero address**, **private view key**, and a **Monero node** URL. For confirmations, `1` is a good default.
+1. **Install this plugin**: upload the `nodewatch-monero` folder to `wp-content/plugins/`, or install the zip from *Plugins > Add New > Upload*. Activate it (WooCommerce must be active). Your host needs the PHP **GMP** and **BCMath** extensions.
+2. **Configure**: WooCommerce > Settings > Payments > **Monero (Nodewatch)**. Pick a mode (**Auto-detect in WordPress** is recommended), then set your **Monero address**, **private view key**, and a **Monero node** URL. For confirmations, `1` is a good default.
 3. (More private) Instead of pasting the view key, put `define( 'XMRPAY_VIEW_KEY', '…' );` in `wp-config.php`.
 4. Test on **stagenet** first, then switch to your mainnet wallet.
 

@@ -31,8 +31,8 @@ class XmrPay_Report {
 	public function register_page() {
 		add_submenu_page(
 			'woocommerce',
-			__( 'Monero payments', 'xmr-pay-for-woocommerce' ),
-			__( 'Monero payments', 'xmr-pay-for-woocommerce' ),
+			__( 'Monero payments', 'nodewatch-monero' ),
+			__( 'Monero payments', 'nodewatch-monero' ),
 			'manage_woocommerce',
 			self::PAGE,
 			array( $this, 'render' )
@@ -105,27 +105,27 @@ class XmrPay_Report {
 
 		$csv_url = wp_nonce_url( admin_url( 'admin-post.php?action=xmrpay_report_csv' ), 'xmrpay_report_csv' );
 
-		echo '<div class="wrap"><h1 class="wp-heading-inline">' . esc_html__( 'Monero payments', 'xmr-pay-for-woocommerce' ) . '</h1> ';
-		echo '<a href="' . esc_url( $csv_url ) . '" class="page-title-action">' . esc_html__( 'Export CSV', 'xmr-pay-for-woocommerce' ) . '</a>';
+		echo '<div class="wrap"><h1 class="wp-heading-inline">' . esc_html__( 'Monero payments', 'nodewatch-monero' ) . '</h1> ';
+		echo '<a href="' . esc_url( $csv_url ) . '" class="page-title-action">' . esc_html__( 'Export CSV', 'nodewatch-monero' ) . '</a>';
 		/* translators: %d: number of orders */
-		echo '<p class="description">' . esc_html( sprintf( _n( '%d Monero order.', '%d Monero orders.', $total, 'xmr-pay-for-woocommerce' ), $total ) ) . '</p>';
+		echo '<p class="description">' . esc_html( sprintf( _n( '%d Monero order.', '%d Monero orders.', $total, 'nodewatch-monero' ), $total ) ) . '</p>';
 
 		if ( ! $orders ) {
-			echo '<p>' . esc_html__( 'No Monero orders yet.', 'xmr-pay-for-woocommerce' ) . '</p></div>';
+			echo '<p>' . esc_html__( 'No Monero orders yet.', 'nodewatch-monero' ) . '</p></div>';
 			return;
 		}
 
 		$heads = array(
-			'order'         => __( 'Order', 'xmr-pay-for-woocommerce' ),
-			'date'          => __( 'Date', 'xmr-pay-for-woocommerce' ),
-			'state'         => __( 'State', 'xmr-pay-for-woocommerce' ),
-			'wc_status'     => __( 'WC status', 'xmr-pay-for-woocommerce' ),
-			'owed_xmr'      => __( 'Owed', 'xmr-pay-for-woocommerce' ),
-			'received_xmr'  => __( 'Received', 'xmr-pay-for-woocommerce' ),
-			'overpaid_xmr'  => __( 'Overpaid', 'xmr-pay-for-woocommerce' ),
-			'confirmations' => __( 'Confs', 'xmr-pay-for-woocommerce' ),
-			'mode'          => __( 'Mode', 'xmr-pay-for-woocommerce' ),
-			'refund_status' => __( 'Refund', 'xmr-pay-for-woocommerce' ),
+			'order'         => __( 'Order', 'nodewatch-monero' ),
+			'date'          => __( 'Date', 'nodewatch-monero' ),
+			'state'         => __( 'State', 'nodewatch-monero' ),
+			'wc_status'     => __( 'WC status', 'nodewatch-monero' ),
+			'owed_xmr'      => __( 'Owed', 'nodewatch-monero' ),
+			'received_xmr'  => __( 'Received', 'nodewatch-monero' ),
+			'overpaid_xmr'  => __( 'Overpaid', 'nodewatch-monero' ),
+			'confirmations' => __( 'Confs', 'nodewatch-monero' ),
+			'mode'          => __( 'Mode', 'nodewatch-monero' ),
+			'refund_status' => __( 'Refund', 'nodewatch-monero' ),
 		);
 		echo '<table class="wp-list-table widefat fixed striped"><thead><tr>';
 		foreach ( $heads as $label ) {
@@ -166,7 +166,7 @@ class XmrPay_Report {
 	/** Stream every xmr-pay order as a CSV download (batched, memory-safe). */
 	public function export_csv() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'xmr-pay-for-woocommerce' ), '', array( 'response' => 403 ) );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'nodewatch-monero' ), '', array( 'response' => 403 ) );
 		}
 		check_admin_referer( 'xmrpay_report_csv' );
 		nocache_headers();

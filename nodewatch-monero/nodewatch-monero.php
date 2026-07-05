@@ -1,14 +1,15 @@
 <?php
 /**
- * Plugin Name:       xmr-pay for WooCommerce
+ * Plugin Name:       Nodewatch Monero Payments for WooCommerce
  * Plugin URI:        https://github.com/SlowBearDigger/xmr-pay
- * Description:        Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. Verifies payments in pure PHP against a Monero node (no backend), or via your own xmr-pay agent. No third party in the payment path.
+ * Description:        Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. Verifies payments in pure PHP against a Monero node (no backend), or via your own agent daemon. No third party in the payment path.
  * Version:           1.1.2
  * Requires at least: 6.2
  * Requires PHP:      7.4
+ * Requires Plugins:  woocommerce
  * Author:            SlowBearDigger
  * License:           MIT
- * Text Domain:       xmr-pay-for-woocommerce
+ * Text Domain:       nodewatch-monero
  * WC requires at least: 7.0
  * WC tested up to:   9.5
  */
@@ -28,13 +29,12 @@ add_action( 'before_woocommerce_init', function () {
 // a 5-minute cron interval for the reconcile safety net (WP ships hourly+ only).
 add_filter( 'cron_schedules', function ( $s ) {
 	if ( ! isset( $s['xmrpay_5min'] ) ) {
-		$s['xmrpay_5min'] = array( 'interval' => 300, 'display' => __( 'Every 5 minutes (xmr-pay)', 'xmr-pay-for-woocommerce' ) );
+		$s['xmrpay_5min'] = array( 'interval' => 300, 'display' => __( 'Every 5 minutes (xmr-pay)', 'nodewatch-monero' ) );
 	}
 	return $s;
 } );
-// translations: WP.org auto-loads, but this covers self-hosted installs too.
+// translations load automatically (WP 4.6+ just-in-time), no load_plugin_textdomain needed.
 add_action( 'init', function () {
-	load_plugin_textdomain( 'xmr-pay-for-woocommerce', false, dirname( plugin_basename( XMRPAY_WC_FILE ) ) . '/languages' );
 	// hourly cleanup of expired unpaid orders (no-op unless the merchant set a window)
 	if ( ! wp_next_scheduled( 'xmrpay_expire_orders' ) ) {
 		wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'xmrpay_expire_orders' );
@@ -70,7 +70,7 @@ add_action( 'plugins_loaded', 'xmrpay_wc_init' );
 function xmrpay_wc_init() {
 	if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
 		add_action( 'admin_notices', function () {
-			echo '<div class="notice notice-error"><p>' . esc_html__( 'xmr-pay for WooCommerce needs WooCommerce active.', 'xmr-pay-for-woocommerce' ) . '</p></div>';
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'Nodewatch Monero Payments for WooCommerce needs WooCommerce active.', 'nodewatch-monero' ) . '</p></div>';
 		} );
 		return;
 	}
@@ -91,7 +91,7 @@ function xmrpay_wc_init() {
 	// let merchants price natively in Monero — register XMR as a WooCommerce
 	// currency (then the cart total IS the XMR amount, no price feed needed).
 	add_filter( 'woocommerce_currencies', function ( $currencies ) {
-		$currencies['XMR'] = __( 'Monero (XMR)', 'xmr-pay-for-woocommerce' );
+		$currencies['XMR'] = __( 'Monero (XMR)', 'nodewatch-monero' );
 		return $currencies;
 	} );
 	add_filter( 'woocommerce_currency_symbol', function ( $symbol, $currency ) {
@@ -116,24 +116,24 @@ function xmrpay_wc_init() {
 		wp_register_script( 'xmrpay-widget', plugins_url( 'assets/xmr-pay.js', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION, true );
 		wp_register_script( 'xmrpay-checkout', plugins_url( 'assets/checkout.js', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION, true );
 		wp_localize_script( 'xmrpay-checkout', 'xmrpayL10n', array(
-			'watching'   => __( 'Watching', 'xmr-pay-for-woocommerce' ),
-			'detected'   => __( 'Detected', 'xmr-pay-for-woocommerce' ),
-			'confirming' => __( 'Confirming', 'xmr-pay-for-woocommerce' ),
-			'confirmed'  => __( 'Confirmed', 'xmr-pay-for-woocommerce' ),
-			'paid'       => __( 'Payment confirmed', 'xmr-pay-for-woocommerce' ),
-			'mWatching'  => __( 'Watching the blockchain for your payment…', 'xmr-pay-for-woocommerce' ),
-			'mMempool'   => __( 'Payment detected — waiting for the first confirmation.', 'xmr-pay-for-woocommerce' ),
-			'mConfirming'=> __( 'Confirming — {c}/{m} confirmations.', 'xmr-pay-for-woocommerce' ),
-			'mPartial'   => __( 'Received {r} XMR — send {s} more (QR updated to the exact amount).', 'xmr-pay-for-woocommerce' ),
-			'mLocked'    => __( 'Funds received — maturing on-chain…', 'xmr-pay-for-woocommerce' ),
-			'mConnecting'=> __( 'Connecting to the payment scanner…', 'xmr-pay-for-woocommerce' ),
-			'block'      => __( 'Latest block', 'xmr-pay-for-woocommerce' ),
+			'watching'   => __( 'Watching', 'nodewatch-monero' ),
+			'detected'   => __( 'Detected', 'nodewatch-monero' ),
+			'confirming' => __( 'Confirming', 'nodewatch-monero' ),
+			'confirmed'  => __( 'Confirmed', 'nodewatch-monero' ),
+			'paid'       => __( 'Payment confirmed', 'nodewatch-monero' ),
+			'mWatching'  => __( 'Watching the blockchain for your payment…', 'nodewatch-monero' ),
+			'mMempool'   => __( 'Payment detected — waiting for the first confirmation.', 'nodewatch-monero' ),
+			'mConfirming'=> __( 'Confirming — {c}/{m} confirmations.', 'nodewatch-monero' ),
+			'mPartial'   => __( 'Received {r} XMR — send {s} more (QR updated to the exact amount).', 'nodewatch-monero' ),
+			'mLocked'    => __( 'Funds received — maturing on-chain…', 'nodewatch-monero' ),
+			'mConnecting'=> __( 'Connecting to the payment scanner…', 'nodewatch-monero' ),
+			'block'      => __( 'Latest block', 'nodewatch-monero' ),
 			// proof mode "I've paid" txid form (assets/checkout.js)
-			'pBadTxid'    => __( 'That doesn’t look like a transaction ID (need 64 hex characters).', 'xmr-pay-for-woocommerce' ),
-			'pChecking'   => __( 'Checking the blockchain…', 'xmr-pay-for-woocommerce' ),
-			'pConfirmed'  => __( 'Payment confirmed! Reloading…', 'xmr-pay-for-woocommerce' ),
-			'pNotYet'     => __( 'Not confirmed yet. If you just paid, wait a minute and try again.', 'xmr-pay-for-woocommerce' ),
-			'pUnreachable'=> __( 'Could not reach the server. Try again.', 'xmr-pay-for-woocommerce' ),
+			'pBadTxid'    => __( 'That doesn’t look like a transaction ID (need 64 hex characters).', 'nodewatch-monero' ),
+			'pChecking'   => __( 'Checking the blockchain…', 'nodewatch-monero' ),
+			'pConfirmed'  => __( 'Payment confirmed! Reloading…', 'nodewatch-monero' ),
+			'pNotYet'     => __( 'Not confirmed yet. If you just paid, wait a minute and try again.', 'nodewatch-monero' ),
+			'pUnreachable'=> __( 'Could not reach the server. Try again.', 'nodewatch-monero' ),
 		) );
 	} );
 

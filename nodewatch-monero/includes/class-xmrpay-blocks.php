@@ -53,7 +53,7 @@ final class XmrPay_Blocks_Support extends AbstractPaymentMethodType {
 
 	public function get_payment_method_data() {
 		return array(
-			'title'       => isset( $this->settings['title'] ) ? $this->settings['title'] : __( 'Monero (XMR)', 'xmr-pay-for-woocommerce' ),
+			'title'       => isset( $this->settings['title'] ) ? $this->settings['title'] : __( 'Monero (XMR)', 'nodewatch-monero' ),
 			'description' => isset( $this->settings['description'] ) ? $this->settings['description'] : '',
 			'supports'    => array( 'products' ),
 		);
