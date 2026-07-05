@@ -23,7 +23,7 @@ jobs:
           extensions: gmp, bcmath        # the pure-PHP verifier needs both
           coverage: none
       - name: run the non-live suite
-        working-directory: xmr-pay-for-woocommerce
+        working-directory: nodewatch-monero
         run: |
           fail=0
           for t in state util aggregation crypto refund report gateway stress concurrency invariant-stress; do
