@@ -11,9 +11,9 @@ us.
 > Requires PHP 7.4+ (with the GMP extension for the no-server modes), WordPress 6.2+,
 > WooCommerce 7.0+. HPOS-compatible. MIT licensed.
 
-> 📦 **AKA `Nodewatch Monero Payments for WooCommerce` on WordPress.org.** WP.org guidelines
+> **AKA `Nodewatch Monero Payments for WooCommerce` on WordPress.org.** WP.org guidelines
 > don't allow a plugin name starting with "XMR", so the directory listing uses a distinct name.
-> Same plugin, same code, same author — not affiliated with the Monero project or Automattic.
+> Same plugin, same code, same author, not affiliated with the Monero project or Automattic.
 
 [![release](https://img.shields.io/github/v/release/SlowBearDigger/xmr-pay-woocommerce?color=blue&label=version)](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest)
 [![tests](https://img.shields.io/github/actions/workflow/status/SlowBearDigger/xmr-pay-woocommerce/test.yml?branch=main&label=tests)](https://github.com/SlowBearDigger/xmr-pay-woocommerce/actions/workflows/test.yml)
