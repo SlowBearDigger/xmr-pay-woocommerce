@@ -18,6 +18,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound -- WC_Gateway_* is the WooCommerce gateway naming convention
 class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 	public function __construct() {
@@ -25,7 +26,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$this->method_title       = __( 'Monero (Nodewatch)', 'nodewatch-monero' );
 		$this->method_description = __( 'Accept Monero, non-custodial. Funds go straight to your address. WordPress verifies payments itself in PHP (no server) — or point it at your own agent daemon at scale.', 'nodewatch-monero' );
 		$this->has_fields         = false;
-		$this->icon               = apply_filters( 'woocommerce_xmrpay_icon', plugins_url( 'assets/monero-symbol.png', XMRPAY_WC_FILE ) );
+		$this->icon               = apply_filters( 'woocommerce_xmrpay_icon', plugins_url( 'assets/monero-symbol.png', XMRPAY_WC_FILE ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- xmrpay is the plugin's internal prefix
 		// non-custodial: we hold no spend key, so we never AUTO-send a refund. 'refunds' IS
 		// supported, but as a CLAIM-LINK flow: process_refund records a pending refund and a
 		// buyer claim-link (the buyer supplies a receive address, since a Monero tx never
@@ -1455,8 +1456,8 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$ids = wc_get_orders( array(
 			'limit'      => 2,
 			'return'     => 'ids',
-			'meta_key'   => '_xmrpay_proof_txid',
-			'meta_value' => $txid,
+			'meta_key'   => '_xmrpay_proof_txid', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- limit:2, indexed key, no WC alternative
+			'meta_value' => $txid, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 		) );
 		foreach ( (array) $ids as $id ) {
 			if ( (int) $id !== (int) $order_id ) {
@@ -1840,7 +1841,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			. '.brand{margin-top:24px;color:#8b8b93;font-size:11px}';
 		// $body_html is assembled above from esc_*/wp_nonce_field — safe by construction.
 		echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">'
-			. '<title>' . esc_html( $title ) . '</title><style>' . $css . '</style></head><body><div class="card"><h1>' . esc_html( $title ) . '</h1>'
+			. '<title>' . esc_html( $title ) . '</title><style>' . $css . '</style></head><body><div class="card"><h1>' . esc_html( $title ) . '</h1>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $css is hardcoded string literals, no user input
 			. $body_html // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- assembled from esc_*/wp_nonce_field
 			. '<p class="brand">' . esc_html( get_bloginfo( 'name' ) ) . '</p></div></body></html>';
 		exit;

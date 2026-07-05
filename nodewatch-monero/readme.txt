@@ -3,7 +3,7 @@ Contributors: slowbeardigger
 Donate link: https://xmrpay.shop
 Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
-Tested up to: 6.7
+Tested up to: 7.0
 Requires PHP: 7.4
 Stable tag: 1.1.2
 License: MIT

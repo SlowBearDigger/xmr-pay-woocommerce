@@ -134,9 +134,8 @@ class XmrPay_Report {
 		echo '</tr></thead><tbody>';
 		foreach ( $orders as $order ) {
 			$r    = self::order_row( $order );
-			$link = esc_url( $order->get_edit_order_url() );
 			echo '<tr>';
-			echo '<td><a href="' . $link . '">#' . esc_html( $r['order'] ) . '</a></td>';
+			echo '<td><a href="' . esc_url( $order->get_edit_order_url() ) . '">#' . esc_html( $r['order'] ) . '</a></td>';
 			echo '<td>' . esc_html( $r['date'] ) . '</td>';
 			echo '<td><code>' . esc_html( $r['state'] ) . '</code></td>';
 			echo '<td>' . esc_html( wc_get_order_status_name( $r['wc_status'] ) ) . '</td>';
