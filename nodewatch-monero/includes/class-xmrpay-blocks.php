@@ -30,7 +30,7 @@ final class XmrPay_Blocks_Support extends AbstractPaymentMethodType {
 		// agent_url; checking only agent_url here would hide a correctly-configured store.
 		$mode = isset( $this->settings['mode'] ) ? $this->settings['mode'] : 'watch';
 		if ( 'agent' === $mode ) {
-			return '' !== trim( (string) ( isset( $this->settings['agent_url'] ) ? $this->settings['agent_url'] : '' ) );
+			return '' !== XmrPay_Util::normalize_agent_url( isset( $this->settings['agent_url'] ) ? $this->settings['agent_url'] : '' );
 		}
 		// no-server modes: address + view key (constant or setting) + GMP and BCMath (the verifier needs both).
 		$has_view = ( defined( 'XMRPAY_VIEW_KEY' ) && '' !== trim( (string) XMRPAY_VIEW_KEY ) )

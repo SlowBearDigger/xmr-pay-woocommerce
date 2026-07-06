@@ -93,6 +93,26 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		wc_get_logger()->log( $level, $message, array( 'source' => 'xmrpay' ) );
 	}
 
+	/** Save settings, then fail closed on agent_url if it is not a localhost URL. */
+	public function process_admin_options() {
+		$saved    = parent::process_admin_options();
+		$settings = get_option( $this->get_option_key(), array() );
+		if ( ! is_array( $settings ) ) {
+			return $saved;
+		}
+		$raw        = isset( $settings['agent_url'] ) ? (string) $settings['agent_url'] : '';
+		$normalized = XmrPay_Util::normalize_agent_url( $raw );
+		if ( '' !== trim( $raw ) && '' === $normalized && class_exists( 'WC_Admin_Settings' ) ) {
+			WC_Admin_Settings::add_error( __( 'Agent URL must point to localhost (127.0.0.1 or ::1).', 'nodewatch-monero' ) );
+		}
+		if ( $raw !== $normalized ) {
+			$settings['agent_url'] = $normalized;
+			update_option( $this->get_option_key(), $settings );
+			$this->settings = $settings;
+		}
+		return $saved;
+	}
+
 	public function init_form_fields() {
 		$this->form_fields = array(
 			'enabled' => array(
@@ -200,7 +220,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'title'       => __( 'Agent URL', 'nodewatch-monero' ),
 				'type'        => 'text',
 				'placeholder' => 'http://127.0.0.1:8788',
-				'description' => __( 'Base URL of your scanner-agent. Keep it private (localhost or a private network).', 'nodewatch-monero' ),
+				'description' => __( 'Base URL of your scanner-agent. Must point to localhost (127.0.0.1, ::1, or localhost).', 'nodewatch-monero' ),
 			),
 			'agent_token' => array(
 				'title'       => __( 'Agent token', 'nodewatch-monero' ),
@@ -586,16 +606,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( ! current_user_can( 'manage_woocommerce' ) || ! check_ajax_referer( 'xmrpay_test_agent', '_wpnonce', false ) ) {
 			wp_send_json_error( array( 'msg' => __( 'not allowed', 'nodewatch-monero' ) ) );
 		}
-		$url   = isset( $_POST['url'] ) ? esc_url_raw( wp_unslash( $_POST['url'] ) ) : '';
-		$token = isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '';
-		if ( $url === '' ) {
+		$url_raw = isset( $_POST['url'] ) ? sanitize_text_field( wp_unslash( $_POST['url'] ) ) : '';
+		$url     = XmrPay_Util::normalize_agent_url( $url_raw );
+		$token   = isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '';
+		if ( '' === trim( $url_raw ) ) {
 			wp_send_json_error( array( 'msg' => __( 'set the agent URL first', 'nodewatch-monero' ) ) );
 		}
-		// the agent is designed to run locally — reject any URL whose host is not
-		// localhost so this button cannot be used to probe internal network services.
-		$parsed = wp_parse_url( $url );
-		$host   = isset( $parsed['host'] ) ? strtolower( trim( $parsed['host'], '[]' ) ) : '';
-		if ( ! in_array( $host, array( 'localhost', '127.0.0.1', '::1' ), true ) ) {
+		if ( '' === $url ) {
 			wp_send_json_error( array( 'msg' => __( 'Agent URL must point to localhost (127.0.0.1 or ::1).', 'nodewatch-monero' ) ) );
 		}
 		$headers = array();
@@ -716,7 +733,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				&& '' !== $this->view_key()
 				&& XmrPay_Util::crypto_ready();
 		}
-		return '' !== trim( (string) $this->get_option( 'agent_url' ) );
+		return '' !== $this->agent_url();
 	}
 
 	/** Warn in wp-admin if a no-server mode is selected but PHP lacks GMP or BCMath. */
@@ -852,8 +869,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return 'mainnet';
 	}
 
+	private function agent_url() {
+		return XmrPay_Util::normalize_agent_url( $this->get_option( 'agent_url' ) );
+	}
+
 	private function agent() {
-		return new XmrPay_Agent( $this->get_option( 'agent_url' ), $this->get_option( 'agent_token' ) );
+		return new XmrPay_Agent( $this->agent_url(), $this->get_option( 'agent_token' ) );
 	}
 
 	/**
@@ -869,7 +890,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $test !== '' && XmrPay_Util::test_amount_allowed(
 			get_option( 'xmrpay_agent_network', '' ),
 			get_option( 'xmrpay_agent_tested_url', '' ),
-			$this->get_option( 'agent_url' ),
+			$this->agent_url(),
 			(string) $this->get_option( 'xmr_address', '' ) // cross-check: mainnet address voids stagenet flag
 		) ) {
 			return $this->fmt_xmr( (float) $test );
@@ -1695,15 +1716,15 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return true;
 	}
 
-	/** Best-effort checksum validation; degrades to the regex prefilter when GMP/BCMath are absent. */
+	/** Checksum/network validation for buyer-supplied refund addresses. Fail closed if unavailable. */
 	private function address_checksum_ok( $addr ) {
 		if ( ! XmrPay_Util::crypto_ready() ) {
-			return true;   // no crypto extensions: is_address_like is the only gate (merchant eyeballs anyway)
+			return false;
 		}
 		try {
 			return $this->scanner()->address_valid( $addr );
 		} catch ( \Throwable $e ) {
-			return true;   // never block a refund on an internal hiccup; the merchant verifies before sending
+			return false;
 		}
 	}
 

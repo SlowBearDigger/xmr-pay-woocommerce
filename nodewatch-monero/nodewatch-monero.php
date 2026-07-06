@@ -11,7 +11,7 @@
  * License:           MIT
  * Text Domain:       nodewatch-monero
  * WC requires at least: 7.0
- * WC tested up to:   9.5
+ * WC tested up to:   10.9.3
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }

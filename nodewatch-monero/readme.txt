@@ -85,6 +85,7 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 == Changelog ==
 
 = 1.1.2 =
+* **Hardening (Agent mode):** Agent URLs are now enforced as localhost-only in the setup wizard, gateway settings, Blocks availability, and runtime client, closing an avoidable server-side request surface before WordPress.org review.
 * **Fix (remote node setup):** WordPress's `wp_safe_remote_*` only allows a short list of ports and silently blocks Monero RPC ports like 18081 (mainnet) / 38089 (stagenet), so pointing the plugin at a remote node failed until you hand-added an `http_allowed_safe_ports` filter. The plugin now whitelists the ports of YOUR configured node(s) automatically (and only those — the safe-HTTP SSRF guard still protects every other host/port). Thanks to the tester who reported this. No settings change.
 
 = 1.1.1 =

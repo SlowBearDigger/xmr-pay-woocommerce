@@ -5,7 +5,7 @@
  * The agent (Node + monero-ts) does all the Monero work — view-only scanning,
  * per-order subaddresses, summing, the time-lock gate. This plugin never touches
  * Monero crypto: it just creates orders and reads their status over HTTP. The
- * agent runs on the merchant's own box (localhost / private network); the buyer's
+ * agent runs on the merchant's own box (localhost); the buyer's
  * browser never reaches it — the plugin proxies status checks server-side.
  *
  * @link https://github.com/SlowBearDigger/xmr-pay  (docs/AGENT.md)
@@ -19,7 +19,8 @@ class XmrPay_Agent {
 	private $token;
 
 	public function __construct( $url, $token = '' ) {
-		$this->url   = untrailingslashit( trim( (string) $url ) );
+		$url         = class_exists( 'XmrPay_Util' ) ? XmrPay_Util::normalize_agent_url( $url ) : trim( (string) $url );
+		$this->url   = untrailingslashit( $url );
 		$this->token = trim( (string) $token );
 	}
 

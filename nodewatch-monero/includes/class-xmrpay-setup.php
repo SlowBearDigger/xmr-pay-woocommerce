@@ -122,11 +122,13 @@ class XmrPay_Setup {
 		if ( ! current_user_can( 'manage_woocommerce' ) || ! check_ajax_referer( 'xmrpay_setup_save', '_wpnonce', false ) ) {
 			wp_send_json_error( array( 'msg' => __( 'not allowed', 'nodewatch-monero' ) ) );
 		}
-		$in  = wp_unslash( $_POST );
+		if ( ! class_exists( 'XmrPay_Util' ) ) {
+			require_once __DIR__ . '/class-xmrpay-util.php';
+		}
 		$cfg = get_option( self::OPTION, array() );
 		if ( ! is_array( $cfg ) ) { $cfg = array(); }
 
-		$text = static function ( $k ) use ( $in ) { return isset( $in[ $k ] ) ? sanitize_text_field( $in[ $k ] ) : ''; };
+		$text = static function ( $k ) { return isset( $_POST[ $k ] ) ? sanitize_text_field( wp_unslash( $_POST[ $k ] ) ) : ''; };
 
 		$cfg['enabled']        = 'yes';
 		$cfg['title']          = $text( 'title' ) !== '' ? $text( 'title' ) : __( 'Monero (XMR)', 'nodewatch-monero' );
@@ -136,7 +138,11 @@ class XmrPay_Setup {
 		$mode          = in_array( $text( 'mode' ), array( 'watch', 'proof', 'agent' ), true ) ? $text( 'mode' ) : 'watch';
 		$cfg['mode']   = $mode;
 		if ( 'agent' === $mode ) {
-			$cfg['agent_url']      = esc_url_raw( isset( $in['agent_url'] ) ? trim( $in['agent_url'] ) : '' );
+			$agent_url = XmrPay_Util::normalize_agent_url( $text( 'agent_url' ) );
+			if ( '' === $agent_url ) {
+				wp_send_json_error( array( 'msg' => __( 'Agent URL must point to localhost (127.0.0.1 or ::1).', 'nodewatch-monero' ) ) );
+			}
+			$cfg['agent_url']      = $agent_url;
 			$cfg['agent_token']    = $text( 'agent_token' );
 			$cfg['webhook_secret'] = $text( 'webhook_secret' );
 		} else {
@@ -306,7 +312,7 @@ class XmrPay_Setup {
 							<h2><?php esc_html_e( 'Connect your agent', 'nodewatch-monero' ); ?></h2>
 							<p class="lead"><?php esc_html_e( 'Run npx xmr-pay on a machine you control; it prints an Agent URL, a token, and a webhook secret. Paste them here.', 'nodewatch-monero' ); ?></p>
 							<div class="xp-field">
-								<label for="xp-agent-url"><?php esc_html_e( 'Agent URL', 'nodewatch-monero' ); ?> <span class="hint"><?php esc_html_e( 'keep it private — localhost or a private network', 'nodewatch-monero' ); ?></span></label>
+								<label for="xp-agent-url"><?php esc_html_e( 'Agent URL', 'nodewatch-monero' ); ?> <span class="hint"><?php esc_html_e( 'localhost only — 127.0.0.1 or ::1', 'nodewatch-monero' ); ?></span></label>
 								<input type="url" id="xp-agent-url" placeholder="http://127.0.0.1:8788" value="<?php echo esc_attr( $g( 'agent_url' ) ); ?>">
 							</div>
 							<div class="xp-field">

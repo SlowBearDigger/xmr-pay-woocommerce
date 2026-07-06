@@ -59,6 +59,42 @@ class XmrPay_Util {
 			|| 1 === preg_match( '/^[1-9A-HJ-NP-Za-km-z]{106}$/', $addr );
 	}
 
+	/**
+	 * Agent URLs are intentionally local-only. The agent holds the merchant's view key,
+	 * and buyer/status requests proxy through WordPress, so accepting arbitrary hosts
+	 * would create an avoidable server-side request surface.
+	 */
+	public static function normalize_agent_url( $url ) {
+		$url = trim( (string) $url );
+		if ( '' === $url ) {
+			return '';
+		}
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) ) {
+			return '';
+		}
+		$scheme = isset( $parts['scheme'] ) ? strtolower( (string) $parts['scheme'] ) : '';
+		$host   = isset( $parts['host'] ) ? strtolower( trim( (string) $parts['host'], '[]' ) ) : '';
+		if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+			return '';
+		}
+		if ( ! in_array( $host, array( 'localhost', '127.0.0.1', '::1' ), true ) ) {
+			return '';
+		}
+		if ( isset( $parts['user'] ) || isset( $parts['pass'] ) || isset( $parts['query'] ) || isset( $parts['fragment'] ) ) {
+			return '';
+		}
+		$port = isset( $parts['port'] ) ? (int) $parts['port'] : 0;
+		if ( $port < 0 || $port > 65535 ) {
+			return '';
+		}
+		$path = isset( $parts['path'] ) ? rtrim( (string) $parts['path'], '/' ) : '';
+		if ( '' !== $path && preg_match( '/[\x00-\x20<>"\']/', $path ) ) {
+			return '';
+		}
+		return $scheme . '://' . ( '::1' === $host ? '[::1]' : $host ) . ( $port > 0 ? ':' . $port : '' ) . $path;
+	}
+
 	/*
 	 * Refund claim-link expiry — the PHP mirror of the lib's src/refund.js. SAME formula
 	 * (expires_at = opened + window), seconds instead of milliseconds. A claim is `requested`

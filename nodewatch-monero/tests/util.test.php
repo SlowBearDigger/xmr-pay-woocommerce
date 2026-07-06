@@ -83,6 +83,16 @@ ok( 'test_amount: empty network → blocked',           XmrPay_Util::test_amount
 ok( 'test_amount: stale flag (url changed) → blocked', XmrPay_Util::test_amount_allowed( 'stagenet', 'http://127.0.0.1:8788', 'http://node.example:18081' ) === false );
 ok( 'test_amount: no tested url → blocked',           XmrPay_Util::test_amount_allowed( 'stagenet', '', 'http://x' ) === false );
 
+// ---------- normalize_agent_url: agent mode is local-only ----------
+eq( 'agent_url: localhost normalized', XmrPay_Util::normalize_agent_url( ' http://localhost:8788/ ' ), 'http://localhost:8788' );
+eq( 'agent_url: 127.0.0.1 accepted',   XmrPay_Util::normalize_agent_url( 'http://127.0.0.1:8788/api/' ), 'http://127.0.0.1:8788/api' );
+eq( 'agent_url: IPv6 loopback accepted', XmrPay_Util::normalize_agent_url( 'http://[::1]:8788' ), 'http://[::1]:8788' );
+eq( 'agent_url: remote host blocked',  XmrPay_Util::normalize_agent_url( 'https://example.com:8788' ), '' );
+eq( 'agent_url: private IP blocked',   XmrPay_Util::normalize_agent_url( 'http://192.168.1.10:8788' ), '' );
+eq( 'agent_url: userinfo blocked',     XmrPay_Util::normalize_agent_url( 'http://user:pass@localhost:8788' ), '' );
+eq( 'agent_url: query blocked',        XmrPay_Util::normalize_agent_url( 'http://localhost:8788/?x=1' ), '' );
+eq( 'agent_url: javascript blocked',   XmrPay_Util::normalize_agent_url( 'javascript:alert(1)' ), '' );
+
 // ---------- same_origin: keep the order key on-site ----------
 ok( 'same_origin: same host → true',                 XmrPay_Util::same_origin( 'https://shop.test/thanks', 'https://shop.test' ) === true );
 ok( 'same_origin: relative path → true',             XmrPay_Util::same_origin( '/thanks?o=1', 'https://shop.test' ) === true );
