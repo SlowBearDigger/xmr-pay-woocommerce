@@ -8,7 +8,7 @@ Accept Monero (XMR) in your WooCommerce store. Funds go straight to your own wal
 itself, in plain PHP, against a Monero node. No third party, no account, no fee from
 us.
 
-> Requires PHP 7.4+ (with the GMP extension for the no-server modes), WordPress 6.2+,
+> Requires PHP 7.4+ (with the GMP and BCMath extensions for the no-server modes), WordPress 6.2+,
 > WooCommerce 7.0+. HPOS-compatible. MIT licensed.
 
 > **AKA `Nodewatch Monero Payments for WooCommerce` on WordPress.org.** WP.org guidelines
@@ -44,7 +44,7 @@ difference is what you have to keep running, and whether anything sits in the ve
 | | **xmr-pay for WooCommerce** | monerowp (Monero Gateway) | BTCPay Server (WC plugin) |
 |---|---|---|---|
 | Setup | Install plugin, paste your address | Install plugin + run monero-wallet-rpc | Stand up a BTCPay server, then connect WooCommerce |
-| Always-on server / daemon? | **No** — pure PHP inside WordPress | Yes — wallet-rpc on your server | Yes — a full BTCPay server |
+| Always-on server / daemon? | **No**, pure PHP inside WordPress | Yes, wallet-rpc on your server | Yes, a full BTCPay server |
 | Verify path | Your node, in pure PHP (no third party) | wallet-rpc, or a public block explorer | Your BTCPay + wallet-rpc |
 | Custody | Non-custodial, view key only | View-only recommended (or hot wallet) | Non-custodial (self-run) |
 | Monero refunds | **Built-in, non-custodial (claim-link)** | Not built-in | Manual (collect a return address) |
@@ -55,7 +55,7 @@ difference is what you have to keep running, and whether anything sits in the ve
 > (multi-coin, point-of-sale, Lightning, accounting) and has years in production; monerowp
 > is the long-standing community plugin many stores already run. xmr-pay for WooCommerce is
 > the newest. Its bet is narrow on purpose: nothing extra to run, payment verified in pure
-> PHP against a node you choose, and non-custodial Monero refunds built in — which neither
+> PHP against a node you choose, and non-custodial Monero refunds built in, which neither
 > of the others offers.
 
 ## No server. It runs inside WordPress.
@@ -122,6 +122,18 @@ Address, view key, node(s), confirmations, an optional underpayment tolerance, a
 checkout theme. That is it. The "Agent settings" section applies only to Agent mode;
 leave it blank otherwise.
 
+Each node has its own authentication setting: **None** for an open RPC endpoint,
+**Basic** for HTTP Basic authentication, or **Digest** for HTTP Digest authentication.
+Enter the username and password in that node's row; credentials are never reused for
+another node during failover. Digest requires PHP's cURL extension. Keep RPC behind
+HTTPS or a private network because Basic credentials are only encoded, not encrypted.
+
+For example, an Umbrel node reachable on your private network could be entered as
+`http://umbrel.local:18081`, with the authentication type and credentials configured
+on that Umbrel RPC endpoint. Do not put credentials in the URL. Use a dedicated,
+read-only RPC account where your node or reverse proxy supports one, and do not share
+the same password across nodes.
+
 ## What it stores and what it touches
 
 No custom database tables. Settings live in one option row, per-order data in order
@@ -144,8 +156,10 @@ Full map: [`docs/DATA-AND-FOOTPRINT.md`](xmr-pay-for-woocommerce/docs/DATA-AND-F
 > transaction still in the mempool may not be served by a public node yet; the check
 > says "try again", never a false "paid", and clears once it is in a block. Your own
 > node removes the wait.
-> **You need the GMP PHP extension** for the no-server modes. Most hosts have it; if
-> not, your host can switch it on.
+> **You need both the GMP and BCMath PHP extensions** for the no-server modes. Enable
+> them in the PHP runtime that actually executes WordPress, not only in the Monero-node
+> container or the host's command-line PHP. In a container setup, install/enable
+> `ext-gmp` and `ext-bcmath` in the WordPress/PHP image, then restart that container.
 
 ## Docs
 

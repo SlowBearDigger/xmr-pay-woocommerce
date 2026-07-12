@@ -5,7 +5,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.1.2
+Stable tag: 1.1.4
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -45,6 +45,16 @@ Default (no server, recommended):
 3. (More private) Instead of pasting the view key, put `define( 'XMRPAY_VIEW_KEY', '…' );` in `wp-config.php`.
 4. Test on **stagenet** first, then switch to your mainnet wallet.
 
+= Authenticated nodes =
+
+Authentication is configured separately for every node. Choose **None** for an open RPC endpoint, **Basic** for HTTP Basic authentication, or **Digest** for HTTP Digest authentication, then enter that node's username and password. Credentials stay attached to that node and are not reused for another node during failover. Digest requires PHP's cURL extension. Use HTTPS or a private network for Basic authentication, because Basic credentials are encoded but not encrypted.
+
+Example for Umbrel on a private network: enter `http://umbrel.local:18081` as the node URL, then choose the authentication type and credentials configured on that Umbrel RPC endpoint. Do not put credentials in the URL. Prefer a dedicated, read-only RPC account where the node or reverse proxy supports one, and use different credentials for different nodes.
+
+**Check setup** tests every configured node (up to 10), shows health and response time on each numbered node card, and keeps secondary-node failures as warnings while at least one matching node works. Its per-request timeout adapts to the number of nodes so a fully offline list does not hold the WordPress request open for nearly a minute. Advanced integrations can override the bounded 1 to 10 second value with the `xmrpay_setup_node_timeout` filter; this diagnostic timeout does not change payment scanning.
+
+For the no-server modes, enable both **GMP** and **BCMath** in the PHP runtime that executes WordPress. Installing them only in the Monero-node container or only for command-line PHP is not enough. In a container setup, install/enable `ext-gmp` and `ext-bcmath` in the WordPress/PHP image and restart that container.
+
 Advanced (Agent mode): run the separate `xmr-pay` daemon (`npm i xmr-pay monero-ts`, then `scanner-agent.js` with your address + view key + node + a webhook secret, bound to localhost, see `docs/AGENT.md`), choose the **Agent** mode, and set the Agent URL / token / webhook secret it prints.
 
 == Frequently Asked Questions ==
@@ -70,6 +80,15 @@ Both. Use a matching address + node (and view key) for the network you want. The
 = Where can I test it? =
 https://demo.xmrpay.shop, a public stagenet demo. Grab test XMR from a stagenet faucet and try the full flow.
 
+== Screenshots ==
+
+1. One configured node in WooCommerce settings.
+2. Two nodes with authentication configured separately.
+3. Live elapsed time while Check setup tests the nodes.
+4. Healthy and warning results with response times.
+5. Node settings on a mobile screen.
+6. A confirmed stagenet payment with its receipt.
+
 == External services ==
 
 This plugin does **not** track you or your customers, sends **no** analytics, and does **not** phone home to the plugin author. It connects only to the service(s) **you** configure, to do its job:
@@ -83,6 +102,16 @@ This plugin does **not** track you or your customers, sends **no** analytics, an
 Your Monero **private view key** (used by the no-server modes) stays on your own server, it is never sent to any external service, including the node.
 
 == Changelog ==
+
+= 1.1.4 =
+* **Multi-node setup health:** Check setup now probes every configured node (up to 10), reports each unhealthy or wrong-network node as a clear warning, and recommends reviewing or replacing it. A degraded failover set remains usable when at least one matching node is healthy; only zero usable nodes blocks setup.
+* **Clear node UX:** nodes are separate numbered cards with per-node authentication, a live elapsed timer while checking, and green/amber health chips with measured response time. The diagnostic timeout adapts to the node count and remains filterable for advanced deployments.
+* **Custom-port reliability:** Monero RPC ports now accumulate across every scanner created during one WordPress request, so independent scanners with different configured ports do not invalidate each other.
+* **Clipboard feedback:** the checkout reports success only after the payment address is copied. Rejected or unavailable Clipboard API calls use a browser fallback, and a failed fallback leaves the address visible for manual selection.
+
+= 1.1.3 =
+* **Authenticated private nodes:** configure None, HTTP Basic, or HTTP Digest independently for each Monero node. Credentials stay scoped to their node during failover, never appear in node URLs, and are not rendered back into settings or diagnostic responses.
+* **Setup diagnostics:** the wizard and full WooCommerce settings now distinguish unreachable nodes, rejected credentials, and unavailable Digest transport.
 
 = 1.1.2 =
 * **Hardening (Agent mode):** Agent URLs are now enforced as localhost-only in the setup wizard, gateway settings, Blocks availability, and runtime client, closing an avoidable server-side request surface before WordPress.org review.
@@ -151,6 +180,9 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 * First public beta. Gateway (classic + Blocks), HPOS support, XMR-native + CoinGecko/fixed pricing, live on-chain progress + top-up, signed HMAC webhooks, exact piconero math, "Test connection", order payment meta box, debug logging.
 
 == Upgrade Notice ==
+
+= 1.1.4 =
+Adds per-node Basic and Digest authentication, clearer multi-node checks, and honest payment-address copy feedback.
 
 = 1.0.1 =
 Security hardening: burning-bug defence (dedup by output key), requires the BCMath extension alongside GMP, and fully order-independent settlement. Recommended for all no-server installs.
