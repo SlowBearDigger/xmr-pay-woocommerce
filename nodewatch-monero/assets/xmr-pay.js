@@ -2308,6 +2308,7 @@ var XP_STR = {
     en: {
         sendExactly: 'Send exactly', anyAmount: 'Send any amount', awaiting: 'Awaiting payment', scanToSend: 'Scan or tap to send',
         addrLabel: 'Payment address — click to copy', copied: 'Copied ✓', openWallet: 'Open in wallet',
+        copyFail: 'Copy failed. Select manually',
         trustToggle: 'Non-custodial · verify this payment',
         trustFunds: 'Funds go directly to the merchant’s wallet — this page never holds your money.',
         trustAddr: 'Check the address — it must start and end with:',
@@ -2345,6 +2346,7 @@ var XP_STR = {
     es: {
         sendExactly: 'Envía exactamente', anyAmount: 'Envía cualquier cantidad', awaiting: 'Esperando pago', scanToSend: 'Escanea o toca para enviar',
         addrLabel: 'Dirección de pago — clic para copiar', copied: 'Copiada ✓', openWallet: 'Abrir en wallet',
+        copyFail: 'No se pudo copiar. Selecciona la dirección',
         trustToggle: 'No-custodial · verifica este pago',
         trustFunds: 'Los fondos van directo a la wallet del comerciante — esta página nunca toca tu dinero.',
         trustAddr: 'Comprueba la dirección — debe empezar y terminar con:',
@@ -2380,6 +2382,42 @@ var XP_STR = {
         disclaimer: 'Verifica la dirección antes de enviar. Los pagos en Monero son finales e irreversibles. Este widget se ofrece tal cual, sin garantía.',
     },
 };
+
+function xpLegacyCopy(text) {
+    var field = null;
+    var appended = false;
+    try {
+        field = document.createElement('textarea');
+        field.value = text;
+        field.setAttribute('readonly', '');
+        field.style.position = 'fixed';
+        field.style.opacity = '0';
+        document.body.appendChild(field);
+        appended = true;
+        field.select();
+        field.setSelectionRange(0, text.length);
+        return !!(document.execCommand && document.execCommand('copy'));
+    } catch (e) {
+        return false;
+    } finally {
+        if (appended) document.body.removeChild(field);
+    }
+}
+
+function xpCopyText(text) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            return Promise.resolve(navigator.clipboard.writeText(text)).then(function () {
+                return true;
+            }, function () {
+                return xpLegacyCopy(text);
+            });
+        } catch (e) {
+            return Promise.resolve(xpLegacyCopy(text));
+        }
+    }
+    return Promise.resolve(xpLegacyCopy(text));
+}
 
 // two skins, one component. default = "clean" (universal, rounded, system
 // sans). skin="brutal" flips to the goxmr look (mono, square, hard offset
@@ -2679,13 +2717,11 @@ class XmrPay extends HTMLElement {
         var self = this;
         var addrBtn = root.querySelector('.addr');
         addrBtn.addEventListener('click', function () {
-            var done = function () {
-                var old = addrBtn.innerHTML;
-                addrBtn.textContent = t.copied;
+            var old = addrBtn.innerHTML;
+            xpCopyText(addr).then(function (copied) {
+                addrBtn.textContent = copied ? t.copied : t.copyFail + ': ' + addr;
                 setTimeout(function () { addrBtn.innerHTML = old; }, 1600);
-            };
-            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(addr).then(done, done);
-            else done();
+            });
         });
 
         root.querySelectorAll('.tgl').forEach(function (tgl) {
