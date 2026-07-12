@@ -24,6 +24,7 @@
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 require_once __DIR__ . '/vendor/monero/load.php';
+require_once __DIR__ . '/class-xmrpay-node-config.php';
 
 use MoneroIntegrations\MoneroPhp\Cryptonote;
 
@@ -37,6 +38,7 @@ class XmrPay_Scanner {
 	private $cn;
 	private $http_timeout;
 	private $network;
+	private $last_node_error;
 
 	/**
 	 * $network ('mainnet'|'stagenet'|'testnet') only affects subaddress STRING generation
@@ -49,9 +51,8 @@ class XmrPay_Scanner {
 		// until one answers) and a conservative tip_height CROSS-CHECK (min height across
 		// responders) — so a lagging or lying node can only DELAY settlement, never bring it
 		// forward. Heavy calls (tx fetch, get_block) inherit failover via node_rpc/json_rpc.
-		$list               = is_array( $node ) ? $node : explode( ',', (string) $node );
-		$this->nodes        = array_values( array_filter( array_map( function ( $u ) { return rtrim( trim( (string) $u ), '/' ); }, $list ) ) );
-		$this->node         = $this->nodes ? $this->nodes[0] : '';
+		$this->nodes        = XmrPay_Node_Config::normalize_list( $node );
+		$this->node         = $this->nodes ? $this->nodes[0] : null;
 		$this->http_timeout = (int) $http_timeout;
 		$this->network      = in_array( $network, array( 'mainnet', 'stagenet', 'testnet' ), true ) ? $network : 'mainnet';
 		$this->cn           = new Cryptonote( $this->network );
@@ -67,15 +68,15 @@ class XmrPay_Scanner {
 	 */
 	private function allow_node_ports() {
 		static $added = false;
-		if ( $added || ! function_exists( 'add_filter' ) ) { return; }
-		$ports = array();
+		static $ports = array();
+		if ( ! function_exists( 'add_filter' ) ) { return; }
 		foreach ( $this->nodes as $n ) {
-			$p = (int) wp_parse_url( $n, PHP_URL_PORT );
-			if ( $p > 0 ) { $ports[] = $p; }
+			$p = (int) wp_parse_url( $n['url'], PHP_URL_PORT );
+			if ( $p > 0 ) { $ports[ $p ] = $p; }
 		}
-		if ( empty( $ports ) ) { return; }
-		add_filter( 'http_allowed_safe_ports', function ( $allowed ) use ( $ports ) {
-			return array_values( array_unique( array_merge( array_map( 'intval', (array) $allowed ), $ports ) ) );
+		if ( $added || empty( $ports ) ) { return; }
+		add_filter( 'http_allowed_safe_ports', function ( $allowed ) use ( &$ports ) {
+			return array_values( array_unique( array_merge( array_map( 'intval', (array) $allowed ), array_values( $ports ) ) ) );
 		} );
 		$added = true;
 	}
@@ -94,23 +95,18 @@ class XmrPay_Scanner {
 		return null;
 	}
 
+	public function last_node_error() {
+		return $this->last_node_error;
+	}
+
 	private function node_rpc_one( $node, $path, $body ) {
-		$url     = $node . $path;
+		$url     = $node['url'] . $path;
 		$payload = function_exists( 'wp_json_encode' ) ? wp_json_encode( $body ) : json_encode( $body );
 		if ( function_exists( 'wp_safe_remote_post' ) ) {
-			$res = wp_safe_remote_post( $url, array(
-				'timeout'             => $this->http_timeout,
-				'headers'             => array( 'Content-Type' => 'application/json' ),
-				'body'                => $payload,
-				'limit_response_size' => 4 * 1024 * 1024, // 4 MB — a real Monero RPC response is ≤ 1 MB
-			) );
-			if ( is_wp_error( $res ) ) {
-				return null;
-			}
-			$code = (int) wp_remote_retrieve_response_code( $res );
-			if ( $code < 200 || $code >= 300 ) {
-				return null;
-			}
+			$args = $this->request_args( $node, array( 'Content-Type' => 'application/json' ) );
+			$args['body'] = $payload;
+			$res = $this->wordpress_request( $node, $url, 'wp_safe_remote_post', $args );
+			if ( null === $res ) { return null; }
 			$raw = wp_remote_retrieve_body( $res );
 			if ( strlen( $raw ) > 4 * 1024 * 1024 ) { return null; }
 			return json_decode( $raw, true );
@@ -129,6 +125,57 @@ class XmrPay_Scanner {
 		) ) );
 		$raw = @file_get_contents( $url, false, $ctx );
 		return $raw === false ? null : json_decode( $raw, true );
+	}
+
+	private function request_args( $node, $headers = array() ) {
+		if ( 'basic' === $node['auth'] ) { $headers['Authorization'] = 'Basic ' . base64_encode( $node['username'] . ':' . $node['password'] ); }
+		return array( 'timeout' => $this->http_timeout, 'headers' => $headers, 'redirection' => 0, 'limit_response_size' => 4 * 1024 * 1024 );
+	}
+
+	private function wordpress_request( $node, $url, $function, $args ) {
+		$hook = null;
+		if ( 'digest' === $node['auth'] ) {
+			if ( ! $this->digest_auth_available() ) {
+				$this->last_node_error = array( 'code' => 'digest_unavailable', 'url' => $node['url'] );
+				return null;
+			}
+			$origin = $this->node_origin( $node['url'] );
+			$credentials = $node['username'] . ':' . $node['password'];
+			$hook = function ( $handle, $request_args, $request_url ) use ( $origin, $credentials ) {
+				if ( $origin !== $this->node_origin( $request_url ) ) { return; }
+				if ( is_object( $handle ) && method_exists( $handle, 'setopt' ) ) {
+					$handle->setopt( CURLOPT_HTTPAUTH, CURLAUTH_DIGEST );
+					$handle->setopt( CURLOPT_USERPWD, $credentials );
+					return;
+				}
+				curl_setopt( $handle, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST );
+				curl_setopt( $handle, CURLOPT_USERPWD, $credentials );
+			};
+			add_action( 'http_api_curl', $hook, 10, 3 );
+		}
+		try {
+			$response = $function( $url, $args );
+		} finally {
+			if ( $hook ) { remove_action( 'http_api_curl', $hook, 10 ); }
+		}
+		if ( is_wp_error( $response ) ) { $this->last_node_error = array( 'code' => 'transport', 'url' => $node['url'] ); return null; }
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 401 === $code ) { $this->last_node_error = array( 'code' => 'unauthorized', 'url' => $node['url'], 'status' => 401 ); return null; }
+		if ( $code < 200 || $code >= 300 ) { $this->last_node_error = array( 'code' => 'http', 'url' => $node['url'], 'status' => $code ); return null; }
+		$this->last_node_error = null;
+		return $response;
+	}
+
+	protected function digest_auth_available() {
+		return function_exists( 'curl_setopt' ) && defined( 'CURLOPT_HTTPAUTH' ) && defined( 'CURLOPT_USERPWD' ) && defined( 'CURLAUTH_DIGEST' );
+	}
+
+	private function node_origin( $url ) {
+		$scheme = strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) );
+		$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+		$port = wp_parse_url( $url, PHP_URL_PORT );
+		if ( ! $port ) { $port = 'https' === $scheme ? 443 : 80; }
+		return $scheme . '://' . $host . ':' . (int) $port;
 	}
 
 	/** Fetch + decode a BATCH of transactions. Returns an array of as_json arrays (each with
@@ -255,13 +302,10 @@ class XmrPay_Scanner {
 		return $heights ? min( $heights ) : null;
 	}
 	private function node_rpc_get_one( $node, $path ) {
-		$url = $node . $path;
+		$url = $node['url'] . $path;
 		if ( function_exists( 'wp_safe_remote_get' ) ) {
-			$res = wp_safe_remote_get( $url, array(
-				'timeout'             => $this->http_timeout,
-				'limit_response_size' => 4 * 1024 * 1024,
-			) );
-			if ( is_wp_error( $res ) ) { return null; }
+			$res = $this->wordpress_request( $node, $url, 'wp_safe_remote_get', $this->request_args( $node ) );
+			if ( null === $res ) { return null; }
 			$raw = wp_remote_retrieve_body( $res );
 			if ( strlen( $raw ) > 4 * 1024 * 1024 ) { return null; }
 			return json_decode( $raw, true );

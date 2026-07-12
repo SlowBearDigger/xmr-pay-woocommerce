@@ -22,6 +22,14 @@
 		if (ag) ag.style.display = agent ? 'block' : 'none';
 	}
 	function val(id){ var e=document.getElementById(id); return e?e.value:''; }
+	function nodeRows(){ return Array.prototype.map.call(document.querySelectorAll('#xp-node-list .xmrpay-node-row'),function(row){return {url:(row.querySelector('.xmrpay-node-url')||{}).value||'',auth:(row.querySelector('.xmrpay-node-auth')||{}).value||'none',username:(row.querySelector('[name$="[username]"]')||{}).value||'',password:(row.querySelector('[name$="[password]"]')||{}).value||''};}); }
+	function appendNodeRows(params){ nodeRows().forEach(function(row,i){Object.keys(row).forEach(function(k){params.set('node_configs['+i+']['+k+']',row[k]);});}); }
+	function formatElapsed(milliseconds){ var seconds=Math.floor(Math.max(0,milliseconds)/1000),minutes=Math.floor(seconds/60);return String(minutes).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0'); }
+	function startNodeTimer(out,list,count){
+		var started=Date.now(); if(window.xmrpayNodeFields)window.xmrpayNodeFields.setChecking(list);
+		function render(){out.textContent=(T.testing||'testing…')+' '+count+' '+(T.nodes||'nodes')+' · '+formatElapsed(Date.now()-started);}
+		render(); return setInterval(render,250);
+	}
 
 	function show(n){
 		steps.forEach(function(s){ s.classList.toggle('show', s.getAttribute('data-step') === String(n)); });
@@ -65,19 +73,22 @@
 	// no-server "Test setup": node + network + view-key-matches-address
 	function testNode(){
 		var out = document.getElementById('xp-node-result'); if(!out) return;
-		out.innerHTML = '<span style="color:#6b7280">'+(T.testing||'testing…')+'</span>';
+		var list=document.getElementById('xp-node-list'),rows=nodeRows(),timer=startNodeTimer(out,list,rows.length);
 		var body = new URLSearchParams({ action:'xmrpay_test_node', _wpnonce:nodeNonce,
-			address:(val('xp-addr')||'').trim(), view_key:(val('xp-view')||'').trim(), nodes:(val('xp-nodes')||'').trim() });
+			address:(val('xp-addr')||'').trim(), view_key:(val('xp-view')||'').trim(), node_configs:JSON.stringify(rows) });
 		fetch(ajaxurl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
 			.then(function(r){return r.json();})
 			.then(function(d){
-				if(!d||!d.success){ out.innerHTML='<span style="color:#b91c1c">✗ '+((d&&d.data&&d.data.msg)||'error')+'</span>'; return; }
+				clearInterval(timer);
+				if(!d||!d.success){if(window.xmrpayNodeFields)window.xmrpayNodeFields.reset(list);out.innerHTML='<span style="color:#b91c1c">✗ '+((d&&d.data&&d.data.msg)||'error')+'</span>'; return;}
+				if(window.xmrpayNodeFields)window.xmrpayNodeFields.applyResults(list,d.data.checks||[]);
 				out.innerHTML = (d.data.checks||[]).map(function(c){
-					var col = c.ok ? '#15803d' : '#b91c1c';
-					return '<div style="color:'+col+';font-size:13px;margin:2px 0">'+(c.ok?'✓':'✗')+' '+String(c.msg).replace(/[<>]/g,'')+'</div>';
+					var warning = !c.ok && c.warning;
+					var col = c.ok ? '#15803d' : (warning ? '#b45309' : '#b91c1c');
+					return '<div style="color:'+col+';font-size:13px;margin:2px 0">'+(c.ok?'✓':(warning?'⚠':'✗'))+' '+String(c.msg).replace(/[<>]/g,'')+'</div>';
 				}).join('');
 			})
-			.catch(function(){ out.innerHTML='<span style="color:#b91c1c">✗ '+(T.reqfail||'request failed')+'</span>'; });
+			.catch(function(){clearInterval(timer);if(window.xmrpayNodeFields)window.xmrpayNodeFields.reset(list);out.innerHTML='<span style="color:#b91c1c">✗ '+(T.reqfail||'request failed')+'</span>';});
 	}
 
 	document.addEventListener('click', function(e){
@@ -121,9 +132,10 @@
 		if (currentMode() === 'agent'){
 			p.agent_url=val('xp-agent-url'); p.agent_token=val('xp-agent-token'); p.webhook_secret=val('xp-webhook-secret');
 		} else {
-			p.xmr_address=val('xp-addr'); p.view_key=val('xp-view'); p.nodes=val('xp-nodes'); p.proof_min_conf=val('xp-minconf');
+			p.xmr_address=val('xp-addr'); p.view_key=val('xp-view'); p.proof_min_conf=val('xp-minconf');
 		}
-		fetch(ajaxurl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(p)})
+		var params=new URLSearchParams(p); if(currentMode()!=='agent')appendNodeRows(params);
+		fetch(ajaxurl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params})
 			.then(function(r){return r.json();})
 			.then(function(d){
 				next.disabled=false;

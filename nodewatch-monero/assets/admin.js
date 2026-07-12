@@ -4,8 +4,26 @@
 (function () {
 	var A = window.xmrpayAdmin || {};
 	function val(id) { var e = document.getElementById(id); return e ? (e.value || '').trim() : ''; }
+	function nodeRows() {
+		return Array.prototype.map.call(document.querySelectorAll('.xmrpay-node-list .xmrpay-node-row'), function (row) {
+			function rowVal(selector) { var field = row.querySelector(selector); return field ? (field.value || '').trim() : ''; }
+			return { url: rowVal('.xmrpay-node-url'), auth: rowVal('.xmrpay-node-auth') || 'none', username: rowVal('[name$="[username]"]'), password: rowVal('[name$="[password]"]') };
+		});
+	}
 	function post(body) {
 		return fetch(A.ajaxurl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body }).then(function (r) { return r.json(); });
+	}
+	function formatElapsed(milliseconds) {
+		var seconds = Math.floor(Math.max(0, milliseconds) / 1000);
+		var minutes = Math.floor(seconds / 60);
+		return String(minutes).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+	}
+	function startNodeTimer(out, list, count) {
+		var started = Date.now();
+		if (window.xmrpayNodeFields) { window.xmrpayNodeFields.setChecking(list); }
+		function render() { out.textContent = (A.checking || 'checking…') + ' ' + count + ' ' + (A.nodes || 'nodes') + ' · ' + formatElapsed(Date.now() - started); }
+		render();
+		return setInterval(render, 250);
 	}
 
 	// Agent mode — "Test connection"
@@ -28,16 +46,21 @@
 	if (nodeBtn) {
 		var nout = document.getElementById('xmrpay-node-result');
 		nodeBtn.addEventListener('click', function () {
-			nout.innerHTML = '<span style="color:#666">' + (A.checking || 'checking…') + '</span>';
-			post(new URLSearchParams({ action: 'xmrpay_test_node', _wpnonce: A.nodeNonce, address: val('woocommerce_xmrpay_xmr_address'), view_key: val('woocommerce_xmrpay_view_key'), nodes: val('woocommerce_xmrpay_nodes') }))
+			var list = document.querySelector('.xmrpay-node-list');
+			var rows = nodeRows();
+			var timer = startNodeTimer(nout, list, rows.length);
+			post(new URLSearchParams({ action: 'xmrpay_test_node', _wpnonce: A.nodeNonce, address: val('woocommerce_xmrpay_xmr_address'), view_key: val('woocommerce_xmrpay_view_key'), node_configs:JSON.stringify(rows) }))
 				.then(function (d) {
-					if (!d || !d.success) { nout.innerHTML = '<span style="color:#b91c1c">✗ ' + ((d && d.data && d.data.msg) || 'error') + '</span>'; return; }
+					clearInterval(timer);
+					if (!d || !d.success) { if (window.xmrpayNodeFields) window.xmrpayNodeFields.reset(list); nout.innerHTML = '<span style="color:#b91c1c">✗ ' + ((d && d.data && d.data.msg) || 'error') + '</span>'; return; }
+					if (window.xmrpayNodeFields) { window.xmrpayNodeFields.applyResults(list, d.data.checks || []); }
 					nout.innerHTML = (d.data.checks || []).map(function (c) {
-						var col = c.ok ? '#15803d' : '#b91c1c';
-						return '<div style="color:' + col + '">' + (c.ok ? '✓' : '✗') + ' ' + String(c.msg).replace(/[<>]/g, '') + '</div>';
+						var warning = !c.ok && c.warning;
+						var col = c.ok ? '#15803d' : (warning ? '#b45309' : '#b91c1c');
+						return '<div style="color:' + col + '">' + (c.ok ? '✓' : (warning ? '⚠' : '✗')) + ' ' + String(c.msg).replace(/[<>]/g, '') + '</div>';
 					}).join('');
 				})
-				.catch(function () { nout.innerHTML = '<span style="color:#b91c1c">✗ ' + (A.reqfail || 'request failed') + '</span>'; });
+				.catch(function () { clearInterval(timer); if (window.xmrpayNodeFields) window.xmrpayNodeFields.reset(list); nout.innerHTML = '<span style="color:#b91c1c">✗ ' + (A.reqfail || 'request failed') + '</span>'; });
 		});
 	}
 })();

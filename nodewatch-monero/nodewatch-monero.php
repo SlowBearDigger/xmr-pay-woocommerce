@@ -3,7 +3,7 @@
  * Plugin Name:       Nodewatch Monero Payments for WooCommerce
  * Plugin URI:        https://github.com/SlowBearDigger/xmr-pay
  * Description:        Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. Verifies payments in pure PHP against a Monero node (no backend), or via your own agent daemon. No third party in the payment path.
- * Version:           1.1.2
+ * Version:           1.1.4
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
@@ -16,8 +16,11 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'XMRPAY_WC_VERSION', '1.1.2' );
+define( 'XMRPAY_WC_VERSION', '1.1.4' );
 define( 'XMRPAY_WC_FILE', __FILE__ );
+
+require_once __DIR__ . '/includes/class-xmrpay-node-config.php';
+require_once __DIR__ . '/includes/class-xmrpay-node-fields.php';
 
 // Declare HPOS (High-Performance Order Storage) compatibility.
 add_action( 'before_woocommerce_init', function () {

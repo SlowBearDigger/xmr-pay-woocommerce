@@ -95,22 +95,35 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 	/** Save settings, then fail closed on agent_url if it is not a localhost URL. */
 	public function process_admin_options() {
+		$old_settings = get_option( $this->get_option_key(), array() );
+		$rows = isset( $_POST['node_configs'] ) ? wp_unslash( $_POST['node_configs'] ) : null;
+		$nodes = null === $rows ? null : XmrPay_Node_Config::sanitize_submission( $rows, $old_settings['node_configs'] ?? ( $old_settings['nodes'] ?? array() ) );
+		if ( is_wp_error( $nodes ) ) {
+			if ( class_exists( 'WC_Admin_Settings' ) ) { WC_Admin_Settings::add_error( $nodes->get_error_message() ); }
+			return false;
+		}
 		$saved    = parent::process_admin_options();
 		$settings = get_option( $this->get_option_key(), array() );
 		if ( ! is_array( $settings ) ) {
 			return $saved;
 		}
+		if ( null !== $nodes ) { $settings['node_configs'] = $nodes; $settings['nodes'] = XmrPay_Node_Config::legacy_urls( $nodes ); }
 		$raw        = isset( $settings['agent_url'] ) ? (string) $settings['agent_url'] : '';
 		$normalized = XmrPay_Util::normalize_agent_url( $raw );
 		if ( '' !== trim( $raw ) && '' === $normalized && class_exists( 'WC_Admin_Settings' ) ) {
 			WC_Admin_Settings::add_error( __( 'Agent URL must point to localhost (127.0.0.1 or ::1).', 'nodewatch-monero' ) );
 		}
+		if ( null !== $nodes ) { update_option( $this->get_option_key(), $settings ); $this->settings = $settings; }
 		if ( $raw !== $normalized ) {
 			$settings['agent_url'] = $normalized;
 			update_option( $this->get_option_key(), $settings );
 			$this->settings = $settings;
 		}
 		return $saved;
+	}
+	public function generate_node_list_html( $key, $data ) {
+		$rows = $this->get_option( 'node_configs', $this->get_option( 'nodes', $data['default'] ?? '' ) );
+		return '<tr><th scope="row">' . esc_html( $data['title'] ) . '</th><td>' . XmrPay_Node_Fields::render( $rows ) . '</td></tr>';
 	}
 
 	public function init_form_fields() {
@@ -190,9 +203,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			),
 			'nodes' => array(
 				'title'       => __( 'Monero node(s)', 'nodewatch-monero' ),
-				'type'        => 'text',
+				'type'        => 'node_list',
 				'default'     => 'http://node2.monerodevs.org:38089',
-				'description' => __( 'Public node URL(s), comma-separated. Your own node first if you run one. List more than one for resilience: requests fail over to the next node, and the block height is cross-checked across them (the lowest is used, so a lagging node can only delay a payment, never confirm it early). Keep them on the same network and well synced. The node never sees your view key.', 'nodewatch-monero' ),
+				'description' => __( 'Add public or private Monero nodes in priority order. Authentication is configured separately for each node. Requests fail over to the next node, and the block height is cross-checked across them (the lowest is used, so a lagging node can only delay a payment, never confirm it early). Keep them on the same network and well synced. The node never sees your view key.', 'nodewatch-monero' ),
 			),
 			'proof_min_conf' => array(
 				'title'   => __( 'Confirmations required', 'nodewatch-monero' ),
@@ -753,12 +766,15 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$section = isset( $_GET['section'] ) ? sanitize_key( wp_unslash( $_GET['section'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( 'xmrpay' !== $section ) { return; }
 		wp_enqueue_script( 'xmrpay-admin', plugins_url( 'assets/admin.js', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION, true );
+		wp_enqueue_style( 'xmrpay-node-fields', plugins_url( 'assets/node-fields.css', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION . '-node-fields-3' );
+		wp_enqueue_script( 'xmrpay-node-fields', plugins_url( 'assets/node-fields.js', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION, true );
 		wp_localize_script( 'xmrpay-admin', 'xmrpayAdmin', array(
 			'ajaxurl'     => admin_url( 'admin-ajax.php' ),
 			'agentNonce'  => wp_create_nonce( 'xmrpay_test_agent' ),
 			'nodeNonce'   => wp_create_nonce( 'xmrpay_test_node' ),
 			'testing'     => __( 'testing…', 'nodewatch-monero' ),
 			'checking'    => __( 'checking…', 'nodewatch-monero' ),
+			'nodes'       => __( 'nodes', 'nodewatch-monero' ),
 			'reqfail'     => __( 'request failed', 'nodewatch-monero' ),
 			'unreachable' => __( 'unreachable', 'nodewatch-monero' ),
 		) );
@@ -777,35 +793,81 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			wp_send_json_error( array( 'msg' => __( 'PHP is missing the GMP or BCMath extension — ask your host to enable ext-gmp and ext-bcmath (or use Agent mode).', 'nodewatch-monero' ) ) );
 		}
 		$address = isset( $_POST['address'] ) ? sanitize_text_field( wp_unslash( $_POST['address'] ) ) : '';
-		$nodes   = isset( $_POST['nodes'] ) ? sanitize_text_field( wp_unslash( $_POST['nodes'] ) ) : '';
+		$raw_nodes = isset( $_POST['node_configs'] ) ? json_decode( wp_unslash( $_POST['node_configs'] ), true ) : array();
+		$old_nodes = $this->get_option( 'node_configs', $this->get_option( 'nodes', array() ) );
+		$submitted_node_count = is_array( $raw_nodes ) ? count( $raw_nodes ) : 0;
+		$nodes = XmrPay_Node_Config::sanitize_submission( is_array( $raw_nodes ) ? array_slice( $raw_nodes, 0, 10 ) : array(), $old_nodes );
+		if ( is_wp_error( $nodes ) || empty( $nodes ) ) {
+			wp_send_json_error( array( 'code' => 'invalid_config', 'msg' => __( 'Enter a valid node URL and authentication details.', 'nodewatch-monero' ) ) );
+		}
 		$view    = isset( $_POST['view_key'] ) ? sanitize_text_field( wp_unslash( $_POST['view_key'] ) ) : '';
 		if ( defined( 'XMRPAY_VIEW_KEY' ) && '' !== trim( (string) XMRPAY_VIEW_KEY ) ) { $view = trim( (string) XMRPAY_VIEW_KEY ); }
 
-		$list     = array_values( array_filter( array_map( 'trim', explode( ',', $nodes ) ) ) );
-		$node     = $list ? $list[0] : 'http://node2.monerodevs.org:38089';
 		$c        = '' !== $address ? $address[0] : '4';
 		$addr_net = '5' === $c ? 'stagenet' : ( in_array( $c, array( '9', 'A', 'B' ), true ) ? 'testnet' : 'mainnet' );
 
 		require_once __DIR__ . '/class-xmrpay-scanner.php';
-		$scanner = new XmrPay_Scanner( $node, $addr_net, 10 );
-		$info    = $scanner->node_info();
-		$keys    = ( '' !== $address && '' !== $view ) ? $scanner->verify_keys( $address, $view ) : null;
+		$checks               = array();
+		$healthy_nodes        = 0;
+		$verification_scanner = null;
+		$fallback_scanner     = null;
+		$setup_timeout        = $this->setup_node_timeout( count( $nodes ) );
+		foreach ( $nodes as $index => $node_config ) {
+			$scanner = $this->create_setup_scanner( array( $node_config ), $addr_net, $setup_timeout );
+			if ( null === $fallback_scanner ) { $fallback_scanner = $scanner; }
+			$started_at   = microtime( true );
+			$info         = $scanner->node_info();
+			$elapsed_ms   = max( 0, (int) round( ( microtime( true ) - $started_at ) * 1000 ) );
+			$node_number  = $index + 1;
+			$reported_net = isset( $info['nettype'] ) ? (string) $info['nettype'] : 'unknown';
 
-		$checks = array();
-		$ok     = true;
-		if ( ! empty( $info['ok'] ) ) {
-			$net = ( 'unknown' !== $info['nettype'] ) ? $info['nettype'] : $addr_net;
-			/* translators: 1: network name, 2: block height */
-			$checks[] = array( 'ok' => true, 'msg' => sprintf( __( 'Node reachable — %1$s, block %2$s.', 'nodewatch-monero' ), $net, isset( $info['height'] ) ? $info['height'] : '?' ) );
-			if ( 'unknown' !== $info['nettype'] && $info['nettype'] !== $addr_net ) {
-				$ok = false;
-				/* translators: 1: the address's network, 2: the node's network */
-				$checks[] = array( 'ok' => false, 'msg' => sprintf( __( 'Network mismatch: your address is %1$s but the node is %2$s.', 'nodewatch-monero' ), $addr_net, $info['nettype'] ) );
+			if ( ! empty( $info['ok'] ) && 'unknown' !== $reported_net && $reported_net !== $addr_net ) {
+				/* translators: 1: node number, 2: node network, 3: address network */
+				$checks[] = array(
+					'ok'      => false,
+					'warning' => true,
+					'code'    => 'network_mismatch',
+					'node'    => $node_number,
+					'elapsed_ms' => $elapsed_ms,
+					'msg'     => sprintf( __( 'Node %1$d uses %2$s, but your address is %3$s. Review or replace this node.', 'nodewatch-monero' ), $node_number, $reported_net, $addr_net ),
+				);
+				continue;
 			}
-		} else {
-			$ok = false;
-			$checks[] = array( 'ok' => false, 'msg' => __( 'Node unreachable — check the URL and port.', 'nodewatch-monero' ) );
+
+			if ( ! empty( $info['ok'] ) ) {
+				$healthy_nodes++;
+				if ( null === $verification_scanner ) { $verification_scanner = $scanner; }
+				$net = 'unknown' !== $reported_net ? $reported_net : $addr_net;
+				/* translators: 1: node number, 2: network name, 3: block height */
+				$checks[] = array( 'ok' => true, 'node' => $node_number, 'elapsed_ms' => $elapsed_ms, 'msg' => sprintf( __( 'Node %1$d is reachable. %2$s, block %3$s.', 'nodewatch-monero' ), $node_number, $net, isset( $info['height'] ) ? $info['height'] : '?' ) );
+				continue;
+			}
+
+			$diagnostic = self::node_setup_diagnostic( $scanner->last_node_error() );
+			/* translators: 1: node number, 2: diagnostic message */
+			$diagnostic['msg'] = sprintf( __( 'Node %1$d: %2$s Review, correct, or replace this node.', 'nodewatch-monero' ), $node_number, $diagnostic['msg'] );
+			$checks[] = array_merge( array( 'ok' => false, 'warning' => true, 'node' => $node_number, 'elapsed_ms' => $elapsed_ms ), $diagnostic );
 		}
+
+		$node_count    = count( $nodes );
+		$warning_count = $node_count - $healthy_nodes;
+		if ( $healthy_nodes > 0 && $warning_count > 0 ) {
+			/* translators: 1: healthy node count, 2: checked node count, 3: warning node count */
+			$summary = sprintf( _n( '%1$d of %2$d nodes are healthy; review or replace %3$d warning node.', '%1$d of %2$d nodes are healthy; review or replace %3$d warning nodes.', $warning_count, 'nodewatch-monero' ), $healthy_nodes, $node_count, $warning_count );
+		} elseif ( $healthy_nodes > 0 ) {
+			/* translators: 1: healthy node count, 2: checked node count */
+			$summary = sprintf( __( '%1$d of %2$d nodes are healthy.', 'nodewatch-monero' ), $healthy_nodes, $node_count );
+		} else {
+			$summary = __( 'No usable nodes remain; review, correct, or replace the warning nodes.', 'nodewatch-monero' );
+		}
+		array_unshift( $checks, array( 'ok' => $healthy_nodes > 0, 'msg' => $summary ) );
+		if ( $submitted_node_count > $node_count ) {
+			$checks[] = array( 'ok' => false, 'warning' => true, 'code' => 'node_limit', 'msg' => __( 'Only the first 10 nodes were checked. Review or remove the extra nodes.', 'nodewatch-monero' ) );
+		}
+
+		$ok      = $healthy_nodes > 0;
+		$scanner = $verification_scanner ?: $fallback_scanner;
+		$keys    = ( '' !== $address && '' !== $view && $scanner ) ? $scanner->verify_keys( $address, $view ) : null;
 		if ( '' !== $address ) {
 			$valid = $keys && ! empty( $keys['address_valid'] );
 			$ok    = $ok && $valid;
@@ -822,6 +884,36 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 
 		wp_send_json_success( array( 'ok' => $ok, 'checks' => $checks ) );
+	}
+
+	protected function create_setup_scanner( $node, $network, $timeout = 5 ) {
+		return new XmrPay_Scanner( $node, $network, $timeout );
+	}
+
+	protected function setup_node_timeout( $node_count ) {
+		$node_count = max( 1, (int) $node_count );
+		$default    = min( 5, max( 1, (int) floor( 25 / ( 2 * $node_count ) ) ) );
+		/**
+		 * Filters the per-node timeout used only by Check setup.
+		 *
+		 * @param int $timeout    Timeout in seconds, clamped to 1 through 10.
+		 * @param int $node_count Number of nodes being checked.
+		 */
+		$timeout = apply_filters( 'xmrpay_setup_node_timeout', $default, $node_count );
+		if ( ! is_numeric( $timeout ) ) { $timeout = $default; }
+		return max( 1, min( 10, (int) $timeout ) );
+	}
+
+	public static function node_setup_diagnostic( $error ) {
+		$code = is_array( $error ) && isset( $error['code'] ) ? (string) $error['code'] : 'transport';
+		$messages = array(
+			'unauthorized'      => __( 'Node rejected the credentials. Check the username, password, and authentication type.', 'nodewatch-monero' ),
+			'transport'         => __( 'Node could not be reached. Check the URL, port, TLS, and firewall.', 'nodewatch-monero' ),
+			'digest_unavailable'=> __( 'Digest authentication is unavailable on this server. Enable PHP cURL or choose Basic/None.', 'nodewatch-monero' ),
+			'http'              => __( 'Node returned an HTTP error. Check the endpoint and node service.', 'nodewatch-monero' ),
+		);
+		if ( ! isset( $messages[ $code ] ) ) { $code = 'transport'; }
+		return array( 'code' => $code, 'msg' => $messages[ $code ] );
 	}
 
 	/** Buyer submits a txid; WordPress verifies it (no scanning, no agent). */
@@ -853,9 +945,10 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 	/** Lazily build the pure-PHP scanner from the configured node(s). */
 	private function scanner() {
 		require_once __DIR__ . '/class-xmrpay-scanner.php';
-		// pass ALL configured nodes — the scanner uses them for failover + a conservative tip
-		// cross-check (min height), so "comma-separated" is real, not just the first one.
-		$nodes = array_values( array_filter( array_map( 'trim', explode( ',', (string) $this->get_option( 'nodes' ) ) ) ) );
+		$nodes = $this->get_option( 'node_configs' );
+		if ( ! is_array( $nodes ) || ! $nodes ) {
+			$nodes = array_values( array_filter( array_map( 'trim', explode( ',', (string) $this->get_option( 'nodes' ) ) ) ) );
+		}
 		if ( ! $nodes ) { $nodes = array( 'http://node2.monerodevs.org:38089' ); }
 		return new XmrPay_Scanner( $nodes, $this->detect_network(), 12 );
 	}

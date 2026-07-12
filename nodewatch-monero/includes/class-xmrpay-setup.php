@@ -153,10 +153,11 @@ class XmrPay_Setup {
 			$vk = $text( 'view_key' );
 			if ( '' !== $vk ) { $cfg['view_key'] = $vk; }
 			// sanitize each comma-separated node URL with esc_url_raw (preserves port + path, strips XSS chars)
-			$raw_nodes = $text( 'nodes' );
-			$cfg['nodes'] = $raw_nodes !== ''
-				? implode( ', ', array_filter( array_map( 'esc_url_raw', array_map( 'trim', explode( ',', $raw_nodes ) ) ) ) )
-				: 'http://node2.monerodevs.org:38089';
+			$raw_rows = isset( $_POST['node_configs'] ) ? wp_unslash( $_POST['node_configs'] ) : array();
+			$nodes = XmrPay_Node_Config::sanitize_submission( $raw_rows, $cfg['node_configs'] ?? ( $cfg['nodes'] ?? array() ) );
+			if ( is_wp_error( $nodes ) ) { wp_send_json_error( array( 'msg' => $nodes->get_error_message() ) ); }
+			$cfg['node_configs'] = $nodes;
+			$cfg['nodes'] = XmrPay_Node_Config::legacy_urls( $nodes );
 			$cfg['proof_min_conf'] = is_numeric( $text( 'proof_min_conf' ) ) ? (string) max( 0, (int) $text( 'proof_min_conf' ) ) : '1';
 		}
 
@@ -189,6 +190,8 @@ class XmrPay_Setup {
 		}
 		wp_enqueue_style( 'xmrpay-wizard', plugins_url( 'assets/wizard.css', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION );
 		wp_enqueue_script( 'xmrpay-wizard', plugins_url( 'assets/wizard.js', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION, true );
+		wp_enqueue_style( 'xmrpay-node-fields', plugins_url( 'assets/node-fields.css', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION . '-node-fields-3' );
+		wp_enqueue_script( 'xmrpay-node-fields', plugins_url( 'assets/node-fields.js', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION, true );
 		wp_localize_script( 'xmrpay-wizard', 'xmrpayWizard', array(
 			'ajaxurl'   => admin_url( 'admin-ajax.php' ),
 			'testNonce' => wp_create_nonce( 'xmrpay_test_agent' ),
@@ -199,6 +202,7 @@ class XmrPay_Setup {
 				'finish'        => __( 'Finish ✓', 'nodewatch-monero' ),
 				'next'          => __( 'Next →', 'nodewatch-monero' ),
 				'testing'       => __( 'testing…', 'nodewatch-monero' ),
+				'nodes'         => __( 'nodes', 'nodewatch-monero' ),
 				'enterUrl'      => __( 'enter the Agent URL first', 'nodewatch-monero' ),
 				'reqfail'       => __( 'request failed', 'nodewatch-monero' ),
 				'copied'        => __( 'Copied', 'nodewatch-monero' ),
@@ -295,8 +299,8 @@ class XmrPay_Setup {
 								<?php endif; ?>
 							</div>
 							<div class="xp-field">
-								<label for="xp-nodes"><?php esc_html_e( 'Monero node URL(s)', 'nodewatch-monero' ); ?> <span class="hint"><?php esc_html_e( 'comma-separated; a public one is fine', 'nodewatch-monero' ); ?></span></label>
-								<input type="text" id="xp-nodes" class="xp-mono" placeholder="http://node2.monerodevs.org:38089" value="<?php echo esc_attr( $g( 'nodes', 'http://node2.monerodevs.org:38089' ) ); ?>">
+				<label><?php esc_html_e( 'Monero nodes', 'nodewatch-monero' ); ?></label>
+				<?php echo XmrPay_Node_Fields::render( $cfg['node_configs'] ?? $g( 'nodes', 'http://node2.monerodevs.org:38089' ), 'node_configs', 'xp' ); ?>
 							</div>
 							<div class="xp-field">
 								<label for="xp-minconf"><?php esc_html_e( 'Confirmations required', 'nodewatch-monero' ); ?></label>
