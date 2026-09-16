@@ -13,6 +13,10 @@ define( 'ABSPATH', __DIR__ . '/' );   // satisfy the includes' direct-access gua
 if ( ! function_exists( 'wp_parse_url' ) ) { function wp_parse_url( $url, $component = -1 ) { return parse_url( (string) $url, $component ); } }
 require_once __DIR__ . '/../includes/vendor/monero/Keccak.php';
 require_once __DIR__ . '/../includes/vendor/monero/base58.php';
+function wp_safe_remote_post( $url, $args ) { $r = $GLOBALS['MOCK_TX_RESPONSES'][ $url ] ?? array(); return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $r ) ); }
+function wp_remote_retrieve_response_code( $res ) { return $res['response']['code']; }
+function wp_remote_retrieve_body( $res ) { return $res['body']; }
+function is_wp_error( $res ) { return false; }
 require_once __DIR__ . '/../includes/class-xmrpay-scanner.php';
 
 $pass = 0; $fail = 0;
@@ -93,6 +97,40 @@ ok( 'fuzz: 1500 hostile txs never threw', ! $crashed );
 ok( 'fuzz: hostile txs never raised a PHP warning/notice', 0 === $err, "warnings=$err" );
 ok( 'fuzz: random data is NEVER detected as a payment (no false-positive)', ! $falsepos );
 ok( 'fuzz: >256-output tx bails via the DoS guard → null', null === $huge_r );
+
+$a = str_repeat( 'a', 64 );
+$row = array( 'tx_hash' => $a, 'as_json' => '{"extra":[],"vout":[]}', 'block_height' => 100 );
+$nodes = array( 'http://127.0.0.1:2', 'http://127.0.0.1:3' );
+$multi = new XmrPay_Scanner( $nodes, 'stagenet' );
+$GLOBALS['MOCK_TX_RESPONSES'] = array(
+    $nodes[0] . '/get_transactions' => array( 'txs' => array( $row ) ),
+    $nodes[1] . '/get_transactions' => array( 'txs' => array( $row ) ),
+);
+ok( 'two agreeing nodes accept a tx', count( $multi->fetch_txs( array( $a ) ) ) === 1 );
+$missing_outputs = $row; $missing_outputs['as_json'] = '{}';
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/get_transactions' ] = array( 'txs' => array( $missing_outputs ) );
+ok( 'tx without output structure pauses verification', null === $multi->fetch_txs( array( $a ) ) );
+$with_extra = $row; $with_extra['as_json'] = '{"extra":[],"vout":[],"unused_daemon_field":true}';
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/get_transactions' ] = array( 'txs' => array( $with_extra ) );
+ok( 'irrelevant daemon fields do not pause verification', count( $multi->fetch_txs( array( $a ) ) ) === 1 );
+$changed_output = $row; $changed_output['as_json'] = '{"extra":[],"vout":[{"amount":1}]}';
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/get_transactions' ] = array( 'txs' => array( $changed_output ) );
+ok( 'payment evidence disagreement pauses verification', null === $multi->fetch_txs( array( $a ) ) );
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/get_transactions' ] = array( 'txs' => array( $row ) );
+$early = $row; $early['block_height'] = 1;
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[0] . '/get_transactions' ] = array( 'txs' => array( $early ) );
+ok( 'height disagreement cannot confirm early', null === $multi->fetch_txs( array( $a ) ) );
+unset( $GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/get_transactions' ] );
+ok( 'missing node pauses multi-node verification', null === $multi->fetch_txs( array( $a ) ) );
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[0] . '/json_rpc' ] = array( 'result' => array( 'tx_hashes' => array( $a ) ) );
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/json_rpc' ] = array( 'result' => array( 'tx_hashes' => array() ) );
+$scan = $multi->scan_all( $ADDR, $VIEW, 100, 100, array( 'tip' => 110 ) );
+ok( 'block hash disagreement cannot advance scan', $scan['scanned_to'] === 99 );
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/json_rpc' ] = array( 'result' => array( 'tx_hashes' => array( $a ) ) );
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[0] . '/get_transactions' ] = array( 'txs' => array( $row ) );
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/get_transactions' ] = array( 'txs' => array( $row ) );
+$scan = $multi->scan_all( $ADDR, $VIEW, 100, 100, array( 'tip' => 110 ) );
+ok( 'matching block and tx advance scan', $scan['scanned_to'] === 100 );
 
 echo "\n" . ( 0 === $fail ? 'ALL GREEN' : 'FAILED' ) . " — $pass passed, $fail failed\n";
 exit( 0 === $fail ? 0 : 1 );

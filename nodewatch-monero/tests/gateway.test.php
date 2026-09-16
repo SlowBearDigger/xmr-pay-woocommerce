@@ -7,6 +7,7 @@
  */
 
 define( 'ABSPATH', __DIR__ . '/' );
+define( 'HOUR_IN_SECONDS', 3600 );
 
 // ---- minimal WP/WC surface the refund path touches ----
 if ( ! function_exists( 'wp_parse_url' ) ) { function wp_parse_url( $u, $c = -1 ) { return parse_url( (string) $u, $c ); } }
@@ -16,6 +17,9 @@ function home_url( $p = '/' ) { return 'https://shop.example' . $p; }
 function wc_price( $a, $args = array() ) { return '$' . number_format( (float) $a, 2 ); }
 function date_i18n( $fmt, $ts ) { return gmdate( 'Y-m-d', (int) $ts ); }
 function get_option( $k, $d = '' ) { return '' !== $d ? $d : 'F j, Y'; }   // date_format / time_format
+function get_current_blog_id() { return 1; }
+function get_transient( $k ) { return $GLOBALS['TRANSIENTS'][ $k ] ?? false; }
+function wc_get_orders( $args ) { return $GLOBALS['PENDING_IDS'] ?? array(); }
 function is_wp_error( $t ) { return $t instanceof WP_Error; }
 class WP_Error { public $code; public $msg; public function __construct( $c = '', $m = '' ) { $this->code = $c; $this->msg = $m; } public function get_error_message() { return $this->msg; } }
 class WC_Payment_Gateway { public $id; public $supports = array(); }   // stub base — ctor skipped below
@@ -32,7 +36,7 @@ class TestGateway extends WC_Gateway_XmrPay {
 
 // a fake WC_Order: a meta bag + a note log.
 class FakeOrder {
-	public $id; public $meta = array(); public $notes = array(); public $pm;
+	public $id; public $meta = array(); public $notes = array(); public $pm; public $status = 'on-hold';
 	public function __construct( $id, $pm = 'xmrpay' ) { $this->id = $id; $this->pm = $pm; }
 	public function get_id() { return $this->id; }
 	public function get_payment_method() { return $this->pm; }
@@ -44,7 +48,8 @@ class FakeOrder {
 	public function add_order_note( $n ) { $this->notes[] = $n; }
 	public function save() {}
 	public function is_paid() { return false; }
-	public function get_status() { return 'on-hold'; }
+	public function get_status() { return $this->status; }
+	public function update_status( $status, $note = '' ) { $this->status = $status; }
 }
 
 $GLOBALS['ORDERS'] = array();
@@ -98,6 +103,27 @@ ok( 'non-xmrpay order → no refund meta written', $other->get_meta( '_xmrpay_re
 // ---- 6. missing order → WP_Error (no fatal) ----
 $r = $gw->process_refund( 999, 1.0, '' );
 ok( 'missing order → WP_Error', is_wp_error( $r ) );
+
+// ---- 7. expiry must wait if a watch scan is still in cooldown ----
+$watch = new FakeOrder( 303 );
+$watch->update_meta_data( '_xmrpay_mode', 'watch' );
+$watch->update_meta_data( '_xmrpay_address', 'merchant-subaddress' );
+$GLOBALS['ORDERS'][303] = $watch;
+$GLOBALS['PENDING_IDS'] = array( 303 );
+$GLOBALS['TRANSIENTS']['xmrpay_scancd_1_303'] = 1;
+TestGateway::$opts['expiry_hours'] = '1';
+$gw->expire_orders();
+ok( 'watch order remains open without a fresh scan', $watch->get_status() === 'on-hold' );
+
+// A signed agent event must not complete orders that require local chain verification.
+$mark_paid = new ReflectionMethod( WC_Gateway_XmrPay::class, 'mark_paid' );
+foreach ( array( 'watch', 'proof' ) as $mode ) {
+    $order = new FakeOrder( 'watch' === $mode ? 404 : 405 );
+    $order->update_meta_data( '_xmrpay_mode', $mode );
+    $GLOBALS['ORDERS'][ $order->get_id() ] = $order;
+    $mark_paid->invoke( $gw, $order, array( 'paid' => true, 'txids' => array( str_repeat( 'a', 64 ) ) ) );
+    ok( $mode . ' ignores agent completion', 'on-hold' === $order->get_status() );
+}
 
 echo "\n" . ( $fail ? 'FAILED' : 'ALL GREEN' ) . "  $pass passed, $fail failed\n";
 exit( $fail ? 1 : 0 );

@@ -205,7 +205,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'title'       => __( 'Monero node(s)', 'nodewatch-monero' ),
 				'type'        => 'node_list',
 				'default'     => 'http://node2.monerodevs.org:38089',
-				'description' => __( 'Add public or private Monero nodes in priority order. Authentication is configured separately for each node. Requests fail over to the next node, and the block height is cross-checked across them (the lowest is used, so a lagging node can only delay a payment, never confirm it early). Keep them on the same network and well synced. The node never sees your view key.', 'nodewatch-monero' ),
+				'description' => __( 'Add public or private Monero nodes in priority order. Authentication is configured separately for each node. Block lookup fails over to the next node. Settlement requires every configured node to answer and agree on the transaction and its block height; an unavailable or disagreeing node pauses payment confirmation. Keep them on the same network and well synced. The node never sees your view key.', 'nodewatch-monero' ),
 			),
 			'proof_min_conf' => array(
 				'title'   => __( 'Confirmations required', 'nodewatch-monero' ),
@@ -347,7 +347,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				// so treat it like agent mode does: never cancel on data we couldn't refresh.
 				// A payment that landed but we can't see right now must survive to the next run.
 				if ( false === $this->scan_order( $order ) ) {
-					$this->log( 'expiry deferred for watch order #' . $oid . ' — node unreachable' );
+					$this->log( 'expiry deferred for watch order #' . $oid . ' — scan incomplete' );
 					continue;
 				}
 				$order = wc_get_order( $oid ); // re-fetch: scan_order may have completed it
@@ -446,8 +446,8 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 	 * a small reorg buffer), and bounded inside the scanner (max blocks + time budget). Once
 	 * the paying txid is discovered it is tracked cheaply by txid (no further block scans).
 	 * Safe to call from both the buyer's status poll AND the cron — mark_paid is idempotent.
-	 * Returns false ONLY when the node was unreachable (so a caller can avoid acting on stale
-	 * "no payment" data); true when a real scan ran or none was needed.
+	 * Returns false until a fresh scan reaches the current tip. Expiry must not act
+	 * on an incomplete scan or a cooldown.
 	 */
 	private function scan_order( $order ) {
 		if ( ! $order || $order->get_meta( '_xmrpay_mode' ) !== 'watch' || $order->is_paid() ) {
@@ -459,12 +459,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$id = $order->get_id();
 		// per-order cooldown — caps how often THIS order hits a node (also a soft lock).
 		$cd = 'xmrpay_scancd_' . get_current_blog_id() . '_' . $id;
-		if ( false !== get_transient( $cd ) ) { return true; }   // scanned moments ago — state is fresh
+		if ( false !== get_transient( $cd ) ) { return false; }  // no fresh scan; expiry must wait
 		set_transient( $cd, 1, 20 );
 
 		$address = (string) $order->get_meta( '_xmrpay_address' );
 		$view    = $this->view_key();
-		if ( $address === '' || $view === '' ) { return true; }
+		if ( $address === '' || $view === '' ) { return false; }
 		$scanner = $this->scanner();
 		$tip     = $scanner->tip_height();
 		// node unreachable — return FALSE so a caller (the expiry cron) does NOT mistake
@@ -540,7 +540,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'confirmations' => (int) $sum['confirmations'],
 				'overpaid'      => '0' !== $sum['overpaid_pico'],
 				'overpaid_xmr'  => XmrPay_Util::pico_to_string( $sum['overpaid_pico'] ),
-			) );
+			), true );
 			return true;
 		}
 
@@ -560,7 +560,8 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			}
 			$order->save();
 		}
-		return true;   // a real scan completed (node was reachable)
+		// Expiry may cancel only after the whole range through the current tip was checked.
+		return $from <= $tip && $scanned_to >= $tip;
 	}
 
 	/** Settings-page read-only badge showing which network the saved address is on. */
@@ -1210,6 +1211,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 		$order->update_meta_data( '_xmrpay_address', isset( $created['address'] ) ? $created['address'] : '' );
 		$order->update_meta_data( '_xmrpay_amount', $amount );
+		$order->update_meta_data( '_xmrpay_mode', 'agent' );
 		$order->save();
 
 		// awaiting payment — not paid yet
@@ -1411,6 +1413,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			$seen = '' !== (string) $order->get_meta( '_xmrpay_watch_txid' );
 			wp_send_json( array( 'paid' => false, 'status' => $seen ? 'confirming' : 'pending', 'reachable' => true ) );
 		}
+		if ( 'proof' === (string) $order->get_meta( '_xmrpay_mode' ) ) {
+			wp_send_json( array( 'paid' => false, 'status' => 'pending' ) );
+		}
 		// short timeout: this is a buyer poll, not a checkout step — never tie up a
 		// PHP worker for 20s on a slow agent (workers would pile up under polling).
 		$r = $this->agent()->get_order( (string) $order_id, 6 );
@@ -1561,7 +1566,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'confirmations' => isset( $res['confirmations'] ) ? (int) $res['confirmations'] : 0,
 			'overpaid'      => '0' !== $verdict['overpaid_pico'],
 			'overpaid_xmr'  => XmrPay_Util::pico_to_string( $verdict['overpaid_pico'] ),
-		) );
+		), true );
 		wp_send_json( array( 'paid' => true, 'status' => 'paid' ) );
 	}
 
@@ -1621,7 +1626,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 	}
 
 	/** Idempotently mark an order paid, recording the full on-chain detail. */
-	private function mark_paid( $order, $data ) {
+	private function mark_paid( $order, $data, $chain_verified = false ) {
 		// a signed webhook (or the status proxy) must only ever complete an order
 		// that is actually paying via this gateway — never resolve some other
 		// payment method's order by id.
@@ -1629,6 +1634,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			return;
 		}
 		if ( $order->is_paid() ) {
+			return;
+		}
+		if ( ! $chain_verified && ! in_array( (string) $order->get_meta( '_xmrpay_mode' ), array( '', 'agent' ), true ) ) {
 			return;
 		}
 		// atomic mutex (add_option-backed) — only one concurrent caller wins. prevents double
@@ -1640,6 +1648,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		// re-fetch to pick up any state another process committed before we got the lock
 		$order = wc_get_order( $order->get_id() );
 		if ( ! $order || $order->is_paid() ) {
+			$this->release_lock( $lock_key );
+			return;
+		}
+		// Only the local chain verification paths may complete watch/proof orders.
+		$mode = (string) $order->get_meta( '_xmrpay_mode' );
+		if ( ! $chain_verified && ! in_array( $mode, array( '', 'agent' ), true ) ) {
 			$this->release_lock( $lock_key );
 			return;
 		}
