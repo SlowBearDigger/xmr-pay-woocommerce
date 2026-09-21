@@ -1,20 +1,6 @@
 <?php
-/**
- * Monero (xmr-pay) WooCommerce payment gateway.
- *
- * Non-custodial: payments go straight to the merchant's own Monero address; this gateway never
- * holds funds and never holds a spend key. It has THREE modes; the no-server ones are the default:
- *
- *   watch (default) → process_payment() mints a per-order subaddress; WordPress itself scans the
- *                     chain in pure PHP (view key only) and completes the order. No daemon to run.
- *   proof           → buyer submits a tx id + proof; WordPress verifies it on-chain in pure PHP.
- *   agent           → optional: a separate self-hosted xmr-pay scanner-agent does the scanning and
- *                     POSTs a signed order.paid webhook; this gateway is then a thin HMAC-verifying
- *                     client. Use it only at scale.
- *
- * In all modes the buyer's browser polls THIS plugin for status (the bundled <xmr-pay> widget),
- * and mark_paid() is the single idempotent completion path.
- */
+// Integrate Monero checkout, reconciliation and refund requests with WooCommerce.
+
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
@@ -27,11 +13,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$this->method_description = __( 'Accept Monero, non-custodial. Funds go straight to your address. WordPress verifies payments itself in PHP (no server) — or point it at your own agent daemon at scale.', 'nodewatch-monero' );
 		$this->has_fields         = false;
 		$this->icon               = apply_filters( 'woocommerce_xmrpay_icon', plugins_url( 'assets/monero-symbol.png', XMRPAY_WC_FILE ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- xmrpay is the plugin's internal prefix
-		// non-custodial: we hold no spend key, so we never AUTO-send a refund. 'refunds' IS
-		// supported, but as a CLAIM-LINK flow: process_refund records a pending refund and a
-		// buyer claim-link (the buyer supplies a receive address, since a Monero tx never
-		// reveals the sender); the merchant pays it by hand and marks it sent. This is the
-		// thing BTCPay's Monero plugin cannot do. See process_refund / handle_refund.
+
 		$this->supports           = array( 'products', 'refunds' );
 
 		$this->init_form_fields();
@@ -42,41 +24,29 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
 		add_action( 'woocommerce_thankyou_' . $this->id, array( $this, 'render_payment_panel' ) );
-		// the order-pay page (paying an existing on-hold order from the email/account)
-		// renders the SAME panel — the buyer sees the existing QR, not a new order.
+
 		add_action( 'woocommerce_receipt_' . $this->id, array( $this, 'render_payment_panel' ) );
-		// put the address + a link to the live payment page in the order email, so a
-		// buyer who closed the tab can still pay.
+
 		add_action( 'woocommerce_email_before_order_table', array( $this, 'email_instructions' ), 10, 3 );
 		add_action( 'woocommerce_api_xmrpay_webhook', array( $this, 'handle_webhook' ) );
-		// proof mode: the buyer submits a txid here and WordPress verifies it on-chain.
+
 		add_action( 'woocommerce_api_xmrpay_verify', array( $this, 'handle_verify' ) );
 		add_action( 'woocommerce_order_refunded', array( $this, 'on_refunded' ), 10, 2 );
-		// non-custodial refund claim-link: the buyer opens it and supplies a Monero receive
-		// address (order_key is the capability, mirroring handle_verify). Buyer-facing page.
+
 		add_action( 'woocommerce_api_xmrpay_refund', array( $this, 'handle_refund' ) );
-		// admin: merchant records the manual payout txid and marks the refund sent (audit trail).
+
 		add_action( 'admin_post_xmrpay_refund_sent', array( $this, 'handle_refund_sent' ) );
-		// admin: merchant reissues an expired refund claim-link (resets the expiry clock).
+
 		add_action( 'admin_post_xmrpay_refund_reissue', array( $this, 'handle_refund_reissue' ) );
-		// privacy: Monero orders carry no IP / user-agent. Monero is irreversible
-		// (no chargebacks), so there is no fraud-dispute reason to retain them.
+
 		add_action( 'woocommerce_checkout_create_order', array( $this, 'strip_pii' ), 20, 2 );
 		add_action( 'woocommerce_store_api_checkout_update_order_from_request', array( $this, 'strip_pii' ), 20, 2 );
-		// admin: a payment-detail block on the order screen (HPOS-safe hook).
-		// NB: the wp_ajax_xmrpay_test_* handlers are registered at the top level (in
-		// the main plugin file), NOT here — admin-ajax requests don't construct the
-		// gateway, so a handler bound in this constructor would never fire (HTTP 400).
+
 		add_action( 'admin_notices', array( $this, 'maybe_warn_gmp' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'admin_assets' ) );
 		add_action( 'woocommerce_admin_order_data_after_billing_address', array( $this, 'admin_order_details' ) );
 	}
 
-	/**
-	 * Privacy: drop the buyer's IP address + user-agent on Monero orders (classic
-	 * and Store API checkout). WooCommerce records both on every order; for an
-	 * irreversible currency there is no chargeback/dispute reason to keep them.
-	 */
 	public function strip_pii( $order, $data = null ) {
 		$method = ( is_array( $data ) && ! empty( $data['payment_method'] ) ) ? $data['payment_method'] : $order->get_payment_method();
 		if ( $this->id === $method ) {
@@ -85,7 +55,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 	}
 
-	/** Write to the WooCommerce log (source: xmrpay) when debug logging is on. */
 	private function log( $message, $level = 'info' ) {
 		if ( 'yes' !== $this->get_option( 'debug_log' ) || ! function_exists( 'wc_get_logger' ) ) {
 			return;
@@ -93,7 +62,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		wc_get_logger()->log( $level, $message, array( 'source' => 'xmrpay' ) );
 	}
 
-	/** Save settings, then fail closed on agent_url if it is not a localhost URL. */
 	public function process_admin_options() {
 		$old_settings = get_option( $this->get_option_key(), array() );
 		$rows = isset( $_POST['node_configs'] ) ? wp_unslash( $_POST['node_configs'] ) : null;
@@ -238,7 +206,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'agent_token' => array(
 				'title'       => __( 'Agent token', 'nodewatch-monero' ),
 				'type'        => 'password',
-				'description' => __( 'The AGENT_TOKEN you set on the agent (optional, but recommended).', 'nodewatch-monero' ),
+				'description' => __( 'The AGENT_TOKEN configured on the agent. Required in Agent mode, including for localhost connections.', 'nodewatch-monero' ),
 			),
 			'test_connection' => array(
 				'title' => __( 'Connection', 'nodewatch-monero' ),
@@ -308,7 +276,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'title'       => __( 'Auto-cancel after (hours)', 'nodewatch-monero' ),
 				'type'        => 'number',
 				'default'     => '0',
-				'description' => __( 'Cancel an unpaid order this many hours after it was placed (frees reserved stock). 0 = never. A late payment to a cancelled order is flagged for you to reconcile by hand, not auto-completed. This window doubles as your rate-drift guard: if you price in fiat, an order paid much later settles at the XMR amount locked at checkout, so set this to how long you are willing to honour that rate (e.g. 12–24). If you price natively in XMR, the amount owed never changes — leave it at 0.', 'nodewatch-monero' ),
+				'description' => __( 'Cancel an unpaid order this many hours after it was placed (frees reserved stock). 0 = never. Payments after cancellation require manual reconciliation. WordPress scanning may not detect a transfer that is still awaiting mining when the order expires. Leave this at 0 to keep waiting. This window doubles as your rate-drift guard: if you price in fiat, an order paid much later settles at the XMR amount locked at checkout, so set this to how long you are willing to honour that rate (e.g. 12–24). If you price natively in XMR, the amount owed never changes — leave it at 0.', 'nodewatch-monero' ),
 				'custom_attributes' => array( 'min' => '0', 'step' => '1' ),
 			),
 			'debug_log' => array(
@@ -320,7 +288,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		);
 	}
 
-	/** Scheduled cleanup: cancel unpaid on-hold orders past the expiry window. */
 	public function expire_orders() {
 		$hours = (int) $this->get_option( 'expiry_hours' );
 		if ( $hours <= 0 ) {
@@ -340,47 +307,40 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			}
 			$mode = (string) $order->get_meta( '_xmrpay_mode' );
 
-			// watch mode: run one final on-chain scan (same as reconcile) before
-			// cancelling — a payment may have arrived in the last cron window.
 			if ( 'watch' === $mode ) {
-				// if the node was unreachable, scan_order returns false — we could NOT look,
-				// so treat it like agent mode does: never cancel on data we couldn't refresh.
-				// A payment that landed but we can't see right now must survive to the next run.
+
 				if ( false === $this->scan_order( $order ) ) {
 					$this->log( 'expiry deferred for watch order #' . $oid . ' — scan incomplete' );
 					continue;
 				}
-				$order = wc_get_order( $oid ); // re-fetch: scan_order may have completed it
+				$order = wc_get_order( $oid );
 				if ( ! $order || $order->is_paid() ) { continue; }
-				if ( 'yes' === $order->get_meta( '_xmrpay_partial_flagged' ) ) { continue; } // funds received, merchant reconciles
+				if ( 'yes' === $order->get_meta( '_xmrpay_partial_flagged' ) ) { continue; }
 				$order->update_status( 'cancelled', __( 'Auto-cancelled: no Monero payment within the expiry window.', 'nodewatch-monero' ) );
 				$this->log( 'expired watch-mode order #' . $oid );
 				continue;
 			}
 
-			// proof mode: buyer must have submitted their txid by now — just cancel.
 			if ( 'proof' === $mode ) {
 				$order->update_status( 'cancelled', __( 'Auto-cancelled: no Monero payment within the expiry window.', 'nodewatch-monero' ) );
 				$this->log( 'expired proof-mode order #' . $oid );
 				continue;
 			}
 
-			// agent mode only: ask the agent before cancelling — a payment may have
-			// arrived (full or PARTIAL) that the webhook/poll missed. NEVER cancel an
-			// order that received funds — that would strand the buyer's money.
 			$r = $this->agent()->get_order( (string) $oid, 6 );
 			if ( is_wp_error( $r ) ) {
-				continue;   // can't confirm there's no payment → be safe, don't cancel
+				continue;
 			}
 			if ( true === filter_var( $r['paid'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
-				$this->mark_paid( $order, $r );   // arrived just in time
+				$this->mark_paid( $order, $r );
+				continue;
+			}
+			if ( ! empty( $r['syncing'] ) || (float) ( $r['pendingXmr'] ?? 0 ) > 0 || (float) ( $r['lockedXmr'] ?? 0 ) > 0 ) {
 				continue;
 			}
 			$recv = isset( $r['receivedXmr'] ) && is_numeric( $r['receivedXmr'] ) ? (float) $r['receivedXmr'] : 0.0;
 			if ( $recv > 0 ) {
-				// PARTIAL payment — keep the order alive (a top-up still completes it)
-				// and flag it ONCE for the merchant. matches BTCPay: an expired-but-
-				// partially-paid invoice is preserved + flagged, never silently killed.
+
 				if ( 'yes' !== $order->get_meta( '_xmrpay_partial_flagged' ) ) {
 					$order->update_meta_data( '_xmrpay_partial_flagged', 'yes' );
 					$order->update_meta_data( '_xmrpay_received', (string) $r['receivedXmr'] );
@@ -399,13 +359,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 	}
 
-	/**
-	 * Safety net: poll the agent for every on-hold xmrpay order and complete the
-	 * ones it reports paid. Independent of BOTH the buyer's browser AND the agent's
-	 * webhook — so a payment still fulfills even if the webhook never reached us
-	 * (endpoint down/blocked, or the buyer closed the tab). mark_paid() is
-	 * idempotent, so this is safe to run on a schedule.
-	 */
 	public function reconcile_on_hold() {
 		$ids = wc_get_orders( array(
 			'status'         => 'on-hold',
@@ -419,15 +372,14 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			if ( ! $order || $order->is_paid() || (string) $order->get_meta( '_xmrpay_address' ) === '' ) {
 				continue;
 			}
-			// watch mode: the cron is the backstop for buyers who closed the tab. scan a
-			// bounded number of orders per tick so a busy store can't blow the time limit.
+
 			if ( $order->get_meta( '_xmrpay_mode' ) === 'watch' ) {
-				if ( $scanned >= 8 ) { continue; }   // cap orders scanned per cron tick
+				if ( $scanned >= 8 ) { continue; }
 				$scanned++;
 				$this->scan_order( $order );
 				continue;
 			}
-			// proof mode completes on the buyer's txid submission — nothing to poll here.
+
 			if ( $order->get_meta( '_xmrpay_mode' ) === 'proof' ) {
 				continue;
 			}
@@ -440,15 +392,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 	}
 
-	/**
-	 * Watch mode: scan the chain for a payment to this order's subaddress and complete it.
-	 * Rate-limited (per-order cooldown), checkpointed (only NEW blocks since last scan, plus
-	 * a small reorg buffer), and bounded inside the scanner (max blocks + time budget). Once
-	 * the paying txid is discovered it is tracked cheaply by txid (no further block scans).
-	 * Safe to call from both the buyer's status poll AND the cron — mark_paid is idempotent.
-	 * Returns false until a fresh scan reaches the current tip. Expiry must not act
-	 * on an incomplete scan or a cooldown.
-	 */
 	private function scan_order( $order ) {
 		if ( ! $order || $order->get_meta( '_xmrpay_mode' ) !== 'watch' || $order->is_paid() ) {
 			return true;
@@ -457,9 +400,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			return true;
 		}
 		$id = $order->get_id();
-		// per-order cooldown — caps how often THIS order hits a node (also a soft lock).
+
 		$cd = 'xmrpay_scancd_' . get_current_blog_id() . '_' . $id;
-		if ( false !== get_transient( $cd ) ) { return false; }  // no fresh scan; expiry must wait
+		if ( false !== get_transient( $cd ) ) { return false; }
 		set_transient( $cd, 1, 20 );
 
 		$address = (string) $order->get_meta( '_xmrpay_address' );
@@ -467,26 +410,20 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $address === '' || $view === '' ) { return false; }
 		$scanner = $this->scanner();
 		$tip     = $scanner->tip_height();
-		// node unreachable — return FALSE so a caller (the expiry cron) does NOT mistake
-		// "couldn't look" for "no payment" and cancel an order whose funds we just can't
-		// see right now. don't burn the cooldown either, so the next tick retries.
+
 		if ( null === $tip ) { delete_transient( $cd ); return false; }
 
 		$min_conf = (int) $this->get_option( 'proof_min_conf', '1' );
 		$tol_pico = XmrPay_Util::xmr_to_pico( $this->get_option( 'proof_tolerance_xmr', '0' ) );
 		$exp_pico = XmrPay_Util::xmr_to_pico( (string) $order->get_meta( '_xmrpay_amount' ) );
 
-		// the SET of paying txids found so far (persisted) — a buyer who pays in
-		// installments, or sends a small test tx then the rest, completes once the SUM
-		// reaches the price. migrate the legacy single-txid meta from older versions.
 		$txids = json_decode( (string) $order->get_meta( '_xmrpay_watch_txids' ), true );
 		if ( ! is_array( $txids ) ) { $txids = array(); }
 		$legacy = (string) $order->get_meta( '_xmrpay_watch_txid' );
 		if ( '' !== $legacy && ! in_array( $legacy, $txids, true ) ) { $txids[] = $legacy; }
 
 		$rows = array();
-		// re-verify the txids we already know — cheap (one fetch each), bounded, and
-		// keeps their confirmation counts current as they mature.
+
 		foreach ( array_slice( $txids, 0, 50 ) as $tx ) {
 			$r = $scanner->verify_payment( $tx, $address, $view, array( 'tip' => $tip, 'require_commitment' => true ) );
 			if ( empty( $r['found'] ) ) { continue; }
@@ -501,14 +438,11 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			);
 		}
 
-		// scan NEW blocks since the checkpoint (with a small reorg buffer) for ADDITIONAL
-		// paying txs — a top-up, or the remainder of an installment payment.
 		$birthday   = (int) $order->get_meta( '_xmrpay_birthday' );
 		$checkpoint = (int) $order->get_meta( '_xmrpay_scan_height' );
-		// re-scan buffer: cover at least 10 blocks, but never fewer than min_conf — so a tx that
-		// moves blocks in a reorg before it settles is always still inside the rescan window.
+
 		$from       = max( $birthday, $checkpoint - max( 10, $min_conf ) );
-		$res        = $scanner->scan_all( $address, $view, $from, $tip, array( 'tip' => $tip, 'max_blocks' => 30, 'time_budget' => 8.0, 'require_commitment' => true ) );
+		$res        = $scanner->scan_all( $address, $view, $from, $tip - 1, array( 'tip' => $tip, 'max_blocks' => 30, 'time_budget' => 8.0, 'require_commitment' => true ) );
 		$scanned_to = isset( $res['scanned_to'] ) ? (int) $res['scanned_to'] : $checkpoint;
 		$matches    = ( isset( $res['matches'] ) && is_array( $res['matches'] ) ) ? $res['matches'] : array();
 		foreach ( $matches as $m ) {
@@ -518,15 +452,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 		$txids = array_values( array_unique( $txids ) );
 		$order->update_meta_data( '_xmrpay_watch_txids', wp_json_encode( $txids ) );
-		if ( ! empty( $txids ) ) { $order->update_meta_data( '_xmrpay_watch_txid', $txids[0] ); } // legacy panel hint
+		if ( ! empty( $txids ) ) { $order->update_meta_data( '_xmrpay_watch_txid', $txids[0] ); }
 		$order->update_meta_data( '_xmrpay_scan_height', max( $checkpoint, $scanned_to ) );
 		$order->save();
 
-		// SUM every committed payment to the subaddress — the WP-native equivalent of
-		// the agent's summarizeTransfers, so the two transports agree on what's paid.
 		$sum = XmrPay_Util::summarize_payments( $rows, $exp_pico, $tol_pico, $min_conf );
 
-		// keep the admin confirmation count fresh while a payment matures.
 		if ( (int) $sum['confirmations'] !== (int) $order->get_meta( '_xmrpay_confirmations' ) ) {
 			$order->update_meta_data( '_xmrpay_confirmations', (int) $sum['confirmations'] );
 			$order->save();
@@ -544,10 +475,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			return true;
 		}
 
-		// not paid yet — but if ANY funds have arrived on-chain (confirmed, in mempool, or
-		// time-locked), record the amount and flag the order PARTIAL so the expiry cron
-		// never cancels an order that already received money, and it auto-completes on a
-		// top-up. NEVER strand a buyer's funds.
 		if ( gmp_cmp( gmp_init( (string) $sum['seen_pico'], 10 ), 0 ) > 0 ) {
 			$order->update_meta_data( '_xmrpay_received', XmrPay_Util::pico_to_string( $sum['received_pico'] ) );
 			if ( 'yes' !== $order->get_meta( '_xmrpay_partial_flagged' ) ) {
@@ -560,11 +487,10 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			}
 			$order->save();
 		}
-		// Expiry may cancel only after the whole range through the current tip was checked.
-		return $from <= $tip && $scanned_to >= $tip;
+
+		return $from < $tip && $scanned_to >= $tip - 1;
 	}
 
-	/** Settings-page read-only badge showing which network the saved address is on. */
 	public function generate_network_status_html( $key, $data ) {
 		$net    = $this->detect_network();
 		$colors = array( 'mainnet' => '#15803d', 'stagenet' => '#b45309', 'testnet' => '#6d28d9' );
@@ -582,7 +508,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return ob_get_clean();
 	}
 
-	/** Settings-page "Check setup" button (no-server modes): node + network + view-key match. */
 	public function generate_test_node_html( $key, $data ) {
 		ob_start(); ?>
 		<tr valign="top">
@@ -591,14 +516,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				<button type="button" class="button" id="xmrpay-test-node"><?php esc_html_e( 'Check setup', 'nodewatch-monero' ); ?></button>
 				<div id="xmrpay-node-result" style="margin-top:10px"></div>
 				<p class="description"><?php esc_html_e( 'Checks the node is reachable, the network matches your address, and your view key belongs to the address (uses the values above, even unsaved).', 'nodewatch-monero' ); ?></p>
-				<?php // behaviour lives in assets/admin.js ?>
+				<?php  ?>
 			</td>
 		</tr>
 		<?php
 		return ob_get_clean();
 	}
 
-	/** Settings-page "Test connection" button: pings the agent's /healthz live. */
 	public function generate_test_connection_html( $key, $data ) {
 		$field = esc_attr( $this->get_field_key( $key ) );
 		ob_start(); ?>
@@ -608,14 +532,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				<button type="button" class="button" id="xmrpay-test-agent"><?php esc_html_e( 'Test connection', 'nodewatch-monero' ); ?></button>
 				<span id="xmrpay-test-result" style="margin-left:10px;font-weight:600"></span>
 				<p class="description"><?php esc_html_e( 'Pings your agent (the URL/token above, even unsaved) and reports network + view-only status.', 'nodewatch-monero' ); ?></p>
-				<?php // behaviour lives in assets/admin.js ?>
+				<?php  ?>
 			</td>
 		</tr>
 		<?php
 		return ob_get_clean();
 	}
 
-	/** AJAX: ping {url}/healthz with the (possibly unsaved) settings from the form. */
 	public function ajax_test_agent() {
 		if ( ! current_user_can( 'manage_woocommerce' ) || ! check_ajax_referer( 'xmrpay_test_agent', '_wpnonce', false ) ) {
 			wp_send_json_error( array( 'msg' => __( 'not allowed', 'nodewatch-monero' ) ) );
@@ -642,16 +565,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			wp_send_json_error( array( 'msg' => sprintf( __( 'agent replied HTTP %d', 'nodewatch-monero' ), (int) $code ) ) );
 		}
 		$network = sanitize_text_field( isset( $body['network'] ) ? $body['network'] : '' );
-		update_option( 'xmrpay_agent_network', $network );   // gates the test_amount override (test networks only)
-		// bind that network to the EXACT url we just probed. get_xmr_amount only
-		// honours test_amount when this still matches the saved agent_url, so a
-		// stale "stagenet" flag can never let test_amount price a mainnet store.
+		update_option( 'xmrpay_agent_network', $network );
+
 		update_option( 'xmrpay_agent_tested_url', untrailingslashit( trim( (string) $url ) ) );
 		$view = ! empty( $body['viewOnly'] ) ? 'view-only' : 'NOT view-only (!)';
 		wp_send_json_success( array( 'msg' => sprintf( 'connected · %s · %s', $network !== '' ? $network : '?', $view ) ) );
 	}
 
-	/** Order screen (admin): show the on-chain payment detail we recorded. */
 	public function admin_order_details( $order ) {
 		if ( ! $order || $order->get_payment_method() !== $this->id ) {
 			return;
@@ -680,7 +600,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		echo '</div>';
 	}
 
-	/** The non-custodial refund tracker inside the order's Monero panel. */
 	private function admin_refund_box( $order ) {
 		$rstatus = (string) $order->get_meta( '_xmrpay_refund_status' );
 		if ( '' === $rstatus ) {
@@ -733,16 +652,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		echo '</div>';
 	}
 
-	/** Is the gateway usable (configured)? */
 	public function is_available() {
 		if ( 'yes' !== $this->enabled ) {
 			return false;
 		}
 		if ( $this->uses_view_key() ) {
-			// no-server modes (proof + watch) are ready once address + view key are set —
-			// and require both GMP and BCMath (the PHP verifier needs them; without either,
-			// order completion would fatal AFTER the buyer paid, so we hide the gateway
-			// instead). See maybe_warn_gmp() + XmrPay_Util::crypto_ready().
+
 			return '' !== trim( (string) $this->get_option( 'xmr_address' ) )
 				&& '' !== $this->view_key()
 				&& XmrPay_Util::crypto_ready();
@@ -750,7 +665,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return '' !== $this->agent_url();
 	}
 
-	/** Warn in wp-admin if a no-server mode is selected but PHP lacks GMP or BCMath. */
 	public function maybe_warn_gmp() {
 		if ( ! $this->uses_view_key() || XmrPay_Util::crypto_ready() ) {
 			return;
@@ -760,10 +674,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			. '</p></div>';
 	}
 
-	/** Enqueue the settings-page admin JS (the Test connection / Check setup buttons). */
 	public function admin_assets( $hook ) {
 		if ( 'woocommerce_page_wc-settings' !== $hook ) { return; }
-		// gateway section only (the section param is read-only navigation, not an action)
+
 		$section = isset( $_GET['section'] ) ? sanitize_key( wp_unslash( $_GET['section'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( 'xmrpay' !== $section ) { return; }
 		wp_enqueue_script( 'xmrpay-admin', plugins_url( 'assets/admin.js', XMRPAY_WC_FILE ), array(), XMRPAY_WC_VERSION, true );
@@ -781,11 +694,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		) );
 	}
 
-	/**
-	 * AJAX: validate a no-server setup live — node reachable + its network, the address,
-	 * and (the big one) that the private VIEW key actually belongs to the address. Returns
-	 * a checklist so the wizard/settings can show concrete feedback before going live.
-	 */
 	public function ajax_test_node() {
 		if ( ! current_user_can( 'manage_woocommerce' ) || ! check_ajax_referer( 'xmrpay_test_node', '_wpnonce', false ) ) {
 			wp_send_json_error( array( 'msg' => __( 'not allowed', 'nodewatch-monero' ) ) );
@@ -894,12 +802,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 	protected function setup_node_timeout( $node_count ) {
 		$node_count = max( 1, (int) $node_count );
 		$default    = min( 5, max( 1, (int) floor( 25 / ( 2 * $node_count ) ) ) );
-		/**
-		 * Filters the per-node timeout used only by Check setup.
-		 *
-		 * @param int $timeout    Timeout in seconds, clamped to 1 through 10.
-		 * @param int $node_count Number of nodes being checked.
-		 */
+
 		$timeout = apply_filters( 'xmrpay_setup_node_timeout', $default, $node_count );
 		if ( ! is_numeric( $timeout ) ) { $timeout = $default; }
 		return max( 1, min( 10, (int) $timeout ) );
@@ -917,25 +820,18 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return array( 'code' => $code, 'msg' => $messages[ $code ] );
 	}
 
-	/** Buyer submits a txid; WordPress verifies it (no scanning, no agent). */
 	private function is_proof_mode() {
 		return 'proof' === $this->get_option( 'mode', 'watch' );
 	}
-	/** WordPress scans the chain itself to auto-detect (no buyer action, no agent). */
+
 	private function is_watch_mode() {
 		return 'watch' === $this->get_option( 'mode', 'watch' );
 	}
-	/** The two no-server modes both verify in PHP with the merchant's view key. */
+
 	private function uses_view_key() {
 		return $this->is_proof_mode() || $this->is_watch_mode();
 	}
 
-	/**
-	 * The merchant's private view key. Prefer a wp-config.php constant
-	 * (define('XMRPAY_VIEW_KEY', '…')) so the view key stays OUT of the database,
-	 * the settings UI, and DB backups; fall back to the gateway setting otherwise.
-	 * (View-only: a leak exposes incoming-payment privacy, never spend ability.)
-	 */
 	private function view_key() {
 		if ( defined( 'XMRPAY_VIEW_KEY' ) && '' !== trim( (string) XMRPAY_VIEW_KEY ) ) {
 			return trim( (string) XMRPAY_VIEW_KEY );
@@ -943,7 +839,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return trim( (string) $this->get_option( 'view_key' ) );
 	}
 
-	/** Lazily build the pure-PHP scanner from the configured node(s). */
 	private function scanner() {
 		require_once __DIR__ . '/class-xmrpay-scanner.php';
 		$nodes = $this->get_option( 'node_configs' );
@@ -954,7 +849,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return new XmrPay_Scanner( $nodes, $this->detect_network(), 12 );
 	}
 
-	/** Infer the Monero network from the configured address prefix (for subaddress minting). */
 	private function detect_network() {
 		$a = trim( (string) $this->get_option( 'xmr_address' ) );
 		$c = '' !== $a ? $a[0] : '4';
@@ -971,30 +865,23 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return new XmrPay_Agent( $this->agent_url(), $this->get_option( 'agent_token' ) );
 	}
 
-	/**
-	 * XMR amount for an order: the test override, else a direct XMR-priced total,
-	 * else convert the fiat total via a price feed. Returns a string (≤12 decimals)
-	 * or a WP_Error.
-	 */
 	public function get_xmr_amount( $order ) {
 		$test = trim( (string) $this->get_option( 'test_amount' ) );
-		// test_amount is a TEST-ONLY override. NEVER let it silently fix the price on
-		// a live store: honor it only when the agent is on a confirmed test network
-		// AND that test was run against the url we're using NOW (see test_amount_allowed).
+
 		if ( $test !== '' && XmrPay_Util::test_amount_allowed(
 			get_option( 'xmrpay_agent_network', '' ),
 			get_option( 'xmrpay_agent_tested_url', '' ),
 			$this->agent_url(),
-			(string) $this->get_option( 'xmr_address', '' ) // cross-check: mainnet address voids stagenet flag
+			(string) $this->get_option( 'xmr_address', '' )
 		) ) {
 			return $this->fmt_xmr( (float) $test );
 		}
 		$currency = strtoupper( $order->get_currency() );
 		$total    = (float) $order->get_total();
 		if ( $currency === 'XMR' ) {
-			return $this->fmt_xmr( $total ); // store priced natively in Monero — no feed
+			return $this->fmt_xmr( $total );
 		}
-		// rate = price of 1 XMR in the store currency (with a fixed-rate fallback)
+
 		$rate = $this->resolve_rate( $currency );
 		if ( is_wp_error( $rate ) ) {
 			return $rate;
@@ -1005,11 +892,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return $this->fmt_xmr( $total / $rate );
 	}
 
-	/**
-	 * The XMR/fiat rate to use, honoring the chosen source with a fixed-rate fallback so a
-	 * feed outage never hard-fails checkout: fixed → the set rate; coingecko/custom → the
-	 * live rate, or the fixed rate if the feed fails and one is set.
-	 */
 	private function resolve_rate( $currency ) {
 		$source = $this->get_option( 'price_source', 'coingecko' );
 		$fixed  = (float) $this->get_option( 'fixed_rate' );
@@ -1020,11 +902,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$live = ( 'custom' === $source ) ? $this->custom_rate( $currency ) : $this->xmr_rate( $currency );
 		if ( ! is_wp_error( $live ) && (float) $live > 0 ) {
 			$live_val = (float) $live;
-			// sanity: with a fixed fallback set, reject a live rate that is wildly off it in
-			// EITHER direction — below 2% of it (near-zero rate → the buyer is told to OVERpay
-			// massively) OR above 50x it (absurd rate → total/rate yields a near-zero XMR amount
-			// → the store collects almost nothing). A tampered/misconfigured/wrong-pair feed is
-			// likely; fall through to the fixed fallback instead of pricing the order wrong.
+
 			if ( $fixed > 0 && ( $live_val < $fixed * 0.02 || $live_val > $fixed * 50 ) ) {
 				$this->log( 'live rate (' . $live_val . ') is implausible vs fixed fallback (' . $fixed . ') — discarding', 'warning' );
 			} else {
@@ -1038,11 +916,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return is_wp_error( $live ) ? $live : new WP_Error( 'xmrpay_rate', __( 'Could not get an XMR price and no fixed-rate fallback is set.', 'nodewatch-monero' ) );
 	}
 
-	/**
-	 * A merchant's own price source: GET a URL returning JSON and read the rate (price of 1
-	 * XMR in the store currency) from a dot-path. The URL may use {currency}/{CURRENCY}
-	 * placeholders. Cached 3 min. The URL is merchant-configured (admin-only).
-	 */
 	private function custom_rate( $currency ) {
 		$vs     = strtolower( $currency );
 		$cached = get_transient( 'xmrpay_rate_custom_' . $vs );
@@ -1054,8 +927,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			return new WP_Error( 'xmrpay_rate', __( 'No custom price-source URL is set.', 'nodewatch-monero' ) );
 		}
 		$url = str_replace( array( '{currency}', '{CURRENCY}' ), array( $vs, strtoupper( $vs ) ), $url );
-		// wp_safe_remote_get applies wp_http_validate_url — a merchant-typed price URL can
-		// never be used to reach internal/private network addresses (SSRF defence in depth).
+
 		$res = wp_safe_remote_get( esc_url_raw( $url ), array( 'timeout' => 12 ) );
 		if ( is_wp_error( $res ) ) {
 			return $res;
@@ -1070,7 +942,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return $rate;
 	}
 
-	/** Walk a dot-path (e.g. "data.rates.XMR") into a decoded-JSON array. */
 	private function dig_path( $data, $path ) {
 		if ( '' === $path ) {
 			return is_numeric( $data ) ? $data : null;
@@ -1085,7 +956,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return $data;
 	}
 
-	/** XMR/fiat rate from CoinGecko (the merchant's own key if set), cached 3 min. */
 	private function xmr_rate( $currency ) {
 		$vs  = strtolower( $currency );
 		$key = 'xmrpay_rate_' . $vs;
@@ -1112,7 +982,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return $rate;
 	}
 
-	/** Canonical XMR decimal string, ≤12 decimals, trailing zeros trimmed. */
 	private function fmt_xmr( $xmr ) {
 		return XmrPay_Util::fmt( $xmr );
 	}
@@ -1123,8 +992,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			return array( 'result' => 'failure' );
 		}
 
-		// already has a subaddress (re-paying via the order-pay page, or a double
-		// submit): reuse it — never allocate a second subaddress for one order.
 		if ( (string) $order->get_meta( '_xmrpay_address' ) !== '' ) {
 			return array( 'result' => 'success', 'redirect' => $this->get_return_url( $order ) );
 		}
@@ -1135,11 +1002,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			return array( 'result' => 'failure' );
 		}
 
-		// free order (100%-off coupon, fully-discounted or zero-priced cart): the
-		// total already includes discounts/shipping/tax, so a 0 here means nothing
-		// to collect on-chain. complete it now, skip the Monero flow.
-		// guard: if the cart total is non-zero but the XMR amount rounded to zero,
-		// that means the rate is misconfigured — fail rather than complete for free.
 		if ( (float) $amount <= 0 ) {
 			if ( (float) $order->get_total() > 0 ) {
 				wc_add_notice( __( 'Could not compute a valid XMR amount. Check your rate settings.', 'nodewatch-monero' ), 'error' );
@@ -1151,11 +1013,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			return array( 'result' => 'success', 'redirect' => $this->get_return_url( $order ) );
 		}
 
-		// ── no-server modes (proof + watch): no agent. ───────────────────────────
-		//   watch → a per-order SUBADDRESS (minor = order id), exact amount; WordPress
-		//           scans the chain and completes it (no buyer action).
-		//   proof → the merchant's PRIMARY address + a unique (nonced) amount so a
-		//           buyer-submitted txid binds to exactly one order.
 		if ( $this->uses_view_key() ) {
 			$primary = trim( (string) $this->get_option( 'xmr_address' ) );
 			if ( $primary === '' || $this->view_key() === '' ) {
@@ -1169,10 +1026,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 					wc_add_notice( __( 'Could not start the Monero payment. Please contact us.', 'nodewatch-monero' ), 'error' );
 					return array( 'result' => 'failure' );
 				}
-				// the birthday height is the floor we scan from. if the node is unreachable right
-				// now, tip_height() is null → (int) would be 0 → the order would scan from GENESIS
-				// and never catch its payment (stuck forever). fail the checkout cleanly instead so
-				// the buyer just retries — never create an unsettleable watch order.
+
 				$birthday = $this->scanner()->tip_height();
 				if ( null === $birthday || (int) $birthday <= 0 ) {
 					$this->log( 'watch checkout #' . $order_id . ' aborted — node unreachable, no tip height', 'error' );
@@ -1181,14 +1035,14 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				}
 				$birthday = (int) $birthday;
 				$order->update_meta_data( '_xmrpay_address', $sub['address'] );
-				$order->update_meta_data( '_xmrpay_amount', $amount );               // exact — the subaddress disambiguates
+				$order->update_meta_data( '_xmrpay_amount', $amount );
 				$order->update_meta_data( '_xmrpay_mode', 'watch' );
 				$order->update_meta_data( '_xmrpay_minor', (int) $order_id );
 				$order->update_meta_data( '_xmrpay_birthday', $birthday );
-				$order->update_meta_data( '_xmrpay_scan_height', $birthday );        // checkpoint
+				$order->update_meta_data( '_xmrpay_scan_height', $birthday );
 				$this->log( 'watch order #' . $order_id . ' → ' . $amount . ' XMR · ' . $sub['address'] . ' · from ' . $birthday );
 			} else {
-				$amount = XmrPay_Util::nonce_amount( $amount );                      // unique → proof binds to one order
+				$amount = XmrPay_Util::nonce_amount( $amount );
 				$order->update_meta_data( '_xmrpay_address', $primary );
 				$order->update_meta_data( '_xmrpay_amount', $amount );
 				$order->update_meta_data( '_xmrpay_mode', 'proof' );
@@ -1214,7 +1068,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$order->update_meta_data( '_xmrpay_mode', 'agent' );
 		$order->save();
 
-		// awaiting payment — not paid yet
 		$order->update_status( 'on-hold', __( 'Awaiting Monero payment.', 'nodewatch-monero' ) );
 		if ( WC()->cart ) {
 			WC()->cart->empty_cart();
@@ -1226,7 +1079,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		);
 	}
 
-	/** Payment panel on the order-received page: QR + amount via the widget, plus a live status poller. */
 	public function render_payment_panel( $order_id ) {
 		$order = wc_get_order( $order_id );
 		if ( ! $order || $order->get_payment_method() !== $this->id ) {
@@ -1238,25 +1090,22 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			return;
 		}
 		$paid    = $order->is_paid();
-		// the order's STORED mode wins (the global setting may have changed since).
+
 		$omode   = (string) $order->get_meta( '_xmrpay_mode' );
-		$proof   = '' !== $omode ? ( 'proof' === $omode ) : $this->is_proof_mode();   // show the txid form?
-		$noserver = in_array( $omode, array( 'proof', 'watch' ), true ) || ( '' === $omode && $this->uses_view_key() ); // no agent → no agent receipt back-fill
+		$proof   = '' !== $omode ? ( 'proof' === $omode ) : $this->is_proof_mode();
+		$noserver = in_array( $omode, array( 'proof', 'watch' ), true ) || ( '' === $omode && $this->uses_view_key() );
 		$status_url = add_query_arg( array(
 			'wc-ajax'   => 'xmrpay_status',
 			'order_id'  => $order_id,
 			'key'       => $order->get_order_key(),
 		), home_url( '/' ) );
-		// proof mode: the buyer submits a txid to this endpoint; WordPress verifies it.
+
 		$verify_url = add_query_arg( array(
 			'wc-api'   => 'xmrpay_verify',
 			'order_id' => $order_id,
 			'key'      => $order->get_order_key(),
 		), home_url( '/' ) );
 
-		// optional merchant redirect once the payment confirms (live transition only).
-		// {order_key} is filled only for a same-origin target — never hand the order's
-		// access token to a third-party domain via the redirect URL / Referer.
 		$redirect = trim( (string) $this->get_option( 'success_redirect' ) );
 		if ( $redirect !== '' ) {
 			$key_sub  = XmrPay_Util::same_origin( $redirect, home_url() ) ? rawurlencode( $order->get_order_key() ) : '';
@@ -1267,13 +1116,8 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			);
 		}
 
-		// once paid, make sure the signed receipt is cached on the order. the webhook
-		// usually delivers it; this back-fills from the agent if it did not (e.g. the
-		// order was completed via the status proxy rather than the webhook).
 		if ( $paid && ! $noserver && (string) $order->get_meta( '_xmrpay_receipt' ) === '' ) {
-			// back-fill at most once every few minutes per order: if the agent has no
-			// receipt yet (or never will, e.g. watch-mode) we must not hit it on every
-			// single render/refresh of this page.
+
 			$cooldown = 'xmrpay_rcpt_' . get_current_blog_id() . '_' . (int) $order_id;
 			if ( false === get_transient( $cooldown ) ) {
 				set_transient( $cooldown, 1, 3 * MINUTE_IN_SECONDS );
@@ -1287,12 +1131,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 		$receipt_html = $paid ? $this->receipt_block_html( $order ) : '';
 
-		// overpayment: the buyer sent more than owed. tell them to contact the store
-		// for a refund of the difference (Monero is non-custodial — no auto-refund).
 		$overpaid     = $paid && $order->get_meta( '_xmrpay_overpaid' ) === 'yes';
 		$overpaid_xmr = (string) $order->get_meta( '_xmrpay_overpaid_xmr' );
-		// terminal (cancelled/expired/failed) + unpaid: never invite a payment to a
-		// dead order. tell the buyer their funds are safe if they already paid.
+
 		$terminal = ! $paid && in_array( $order->get_status(), array( 'cancelled', 'failed' ), true );
 
 		wp_enqueue_script( 'xmrpay-widget' );
@@ -1331,21 +1172,15 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 						</button>
 						<div id="xmrpay-proof-msg" style="margin-top:8px;font-size:13px;min-height:1em"></div>
 					</div>
-					<?php // behaviour lives in assets/checkout.js (wired from .xmrpay-proof[data-verify]) ?>
+					<?php  ?>
 				<?php endif; ?>
 			<?php endif; ?>
-			<?php echo wp_kses_post( $receipt_html ); // built with esc_* in receipt_block_html() ?>
+			<?php echo wp_kses_post( $receipt_html );  ?>
 			<?php endif; ?>
 		</section>
 		<?php
 	}
 
-	/**
-	 * The "your cryptographic receipt" block shown once an order is paid: a download
-	 * (the signed envelope as a .json) and a link to the bundled offline verifier
-	 * (the receipt rides in the URL fragment, so the verifier needs no backend).
-	 * Returns '' when no receipt is on the order.
-	 */
 	private function receipt_block_html( $order ) {
 		$json = (string) $order->get_meta( '_xmrpay_receipt' );
 		if ( $json === '' ) {
@@ -1376,16 +1211,14 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return ob_get_clean();
 	}
 
-	/** Server-side proxy: the buyer's browser polls this; we query the private agent. */
 	public function ajax_status() {
-		// per-IP failed-auth counter (soft limit, 30 failures/60s) — deters order-ID
-		// enumeration without blocking legitimate buyers who just mistyped the URL.
+
 		$ip     = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
 		$rl_key = 'xmrpay_rl_s_' . get_current_blog_id() . '_' . substr( md5( $ip ), 0, 16 );
 		if ( (int) get_transient( $rl_key ) > 30 ) {
 			wp_send_json( array( 'error' => 'too many requests' ), 429 );
 		}
-		// read-only status poll, authenticated by the secret order key (hash_equals below), not a nonce.
+
 		$order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$key      = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$order    = $order_id ? wc_get_order( $order_id ) : false;
@@ -1396,17 +1229,14 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $order->is_paid() ) {
 			wp_send_json( array( 'paid' => true, 'status' => 'paid' ) );
 		}
-		// terminal: a cancelled/failed/refunded order will never flip to paid — tell
-		// the client to STOP polling (and skip the agent call). a late payment to it
-		// is handled out-of-band by mark_paid's reconcile note.
+
 		if ( in_array( $order->get_status(), array( 'cancelled', 'failed', 'refunded' ), true ) ) {
 			wp_send_json( array( 'paid' => false, 'status' => $order->get_status(), 'terminal' => true ) );
 		}
-		// WATCH mode: the buyer's poll IS the active trigger — scan their order now
-		// (rate-limited inside scan_order). Then report the fresh state. No agent.
+
 		if ( $order->get_meta( '_xmrpay_mode' ) === 'watch' ) {
 			$this->scan_order( $order );
-			$order = wc_get_order( $order_id );   // re-read after a possible completion
+			$order = wc_get_order( $order_id );
 			if ( $order->is_paid() ) {
 				wp_send_json( array( 'paid' => true, 'status' => 'paid' ) );
 			}
@@ -1416,15 +1246,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( 'proof' === (string) $order->get_meta( '_xmrpay_mode' ) ) {
 			wp_send_json( array( 'paid' => false, 'status' => 'pending' ) );
 		}
-		// short timeout: this is a buyer poll, not a checkout step — never tie up a
-		// PHP worker for 20s on a slow agent (workers would pile up under polling).
+
 		$r = $this->agent()->get_order( (string) $order_id, 6 );
 		if ( is_wp_error( $r ) ) {
-			// the agent is unreachable — surface it as a transient "watching" state,
-			// not an error (the buyer's payment is on-chain regardless).
+
 			wp_send_json( array( 'paid' => false, 'status' => 'pending', 'reachable' => false ) );
 		}
-		// authoritative completion is the webhook; reflect a paid here too, defensively
+
 		if ( filter_var( $r['paid'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
 			$this->mark_paid( $order, $r );
 		}
@@ -1438,27 +1266,19 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'confirmations'    => $num( 'confirmations' ),
 			'minConfirmations' => $num( 'minConfirmations' ),
 			'tipHeight'        => $num( 'tipHeight' ),
-			// (A) the agent is still catching up to the chain tip — the buyer's UI can
-			// say "node syncing" instead of a bare "pending" that looks like a miss.
+
 			'syncing'          => ! empty( $r['syncing'] ),
 			'reachable'        => true,
 		) );
 	}
 
-	/**
-	 * Proof mode: the buyer POSTs a txid; WordPress verifies it on-chain itself (with
-	 * the merchant's view key, against a public node) and completes the order. No agent.
-	 * Gated by the order key; rate-limited; the txid is deduped so one payment can settle
-	 * exactly one order.
-	 */
 	public function handle_verify() {
 		nocache_headers();
 		$order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;
 		$key      = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
 		$txid     = isset( $_POST['txid'] ) ? strtolower( sanitize_text_field( wp_unslash( $_POST['txid'] ) ) ) : '';
 		$nonce    = isset( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';
-		// nonce ties the request to the specific browser session that rendered the page —
-		// must check before any DB work so invalid/missing nonces are rejected cheaply.
+
 		if ( $order_id < 1 || ! wp_verify_nonce( $nonce, 'xmrpay_verify_' . $order_id ) ) {
 			wp_send_json( array( 'paid' => false, 'message' => __( 'Security check failed. Reload the page and try again.', 'nodewatch-monero' ) ), 403 );
 		}
@@ -1470,9 +1290,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $order->is_paid() ) {
 			wp_send_json( array( 'paid' => true, 'status' => 'paid' ) );
 		}
-		// proof verify is only valid for proof-mode orders. agent-mode orders have no
-		// view key or subaddress for PHP to verify against — reject to prevent a
-		// policy bypass (different min_conf settings between modes).
+
 		if ( 'proof' !== (string) $order->get_meta( '_xmrpay_mode' ) ) {
 			wp_send_json( array( 'paid' => false, 'message' => __( 'Proof verification is not available for this order.', 'nodewatch-monero' ) ), 403 );
 			return;
@@ -1483,20 +1301,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( ! preg_match( '/^[0-9a-f]{64}$/', $txid ) ) {
 			wp_send_json( array( 'paid' => false, 'message' => __( 'That doesn’t look like a transaction ID.', 'nodewatch-monero' ) ) );
 		}
-		// rate-limit: this hits a node, so cap one buyer to one check every few seconds.
+
 		$rl = 'xmrpay_vrl_' . get_current_blog_id() . '_' . (int) $order_id;
 		if ( false !== get_transient( $rl ) ) {
 			wp_send_json( array( 'paid' => false, 'message' => __( 'Please wait a few seconds and try again.', 'nodewatch-monero' ) ) );
 		}
 		set_transient( $rl, 1, 5 );
 
-		// dedup: a txid already claimed by another order can never settle this one. The
-		// meta query is the durable check; a short txid-scoped lock around it + the node
-		// call serialises two requests that submit the SAME txid to DIFFERENT orders at
-		// once, so they can't both pass the check before either writes. (The unique
-		// amount-nonce per order is the deeper guarantee; this closes the race window.)
-		// acquire_lock is an atomic add_option (INSERT that fails if present) — it atomically
-		// claims the txid slot. if it returns false, another request already holds this txid.
 		$txkey = 'tx_' . $txid;
 		if ( ! $this->acquire_lock( $txkey, 30 ) ) {
 			wp_send_json( array( 'paid' => false, 'message' => __( 'That transaction is being processed — try again in a moment.', 'nodewatch-monero' ) ) );
@@ -1522,17 +1333,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			wp_send_json( array( 'paid' => false, 'status' => 'not-found', 'message' => __( 'No payment to your order was found in that transaction. Check the transaction ID.', 'nodewatch-monero' ) ) );
 		}
 		if ( empty( $res['commitment_ok'] ) ) {
-			// a PRUNED node can't return the on-chain commitment, so a real payment fails the check
-			// for an operational reason, not a bad payment — tell them apart so the merchant knows
-			// to switch nodes instead of chasing a "bad" payment.
+
 			$msg = ( isset( $res['commitment_present'] ) && ! $res['commitment_present'] )
 				? __( 'We could not fully verify this payment — the store’s Monero node may be pruned. Please contact the store.', 'nodewatch-monero' )
 				: __( 'That transaction did not verify. Contact the store.', 'nodewatch-monero' );
 			wp_send_json( array( 'paid' => false, 'status' => 'invalid', 'message' => $msg ) );
 		}
-		// a MEMPOOL tx the node flags as double_spend_seen is a visible double-spend attempt — never
-		// settle it (only bites at min_conf 0, where a 0-conf mempool payment could otherwise pass).
-		// once it lands in a block the daemon clears the flag and the payment confirms normally.
+
 		if ( ! empty( $res['in_pool'] ) && ! empty( $res['double_spend_seen'] ) ) {
 			wp_send_json( array( 'paid' => false, 'status' => 'pending', 'message' => __( 'Payment seen but not yet confirmable — waiting for a block. This page will update shortly.', 'nodewatch-monero' ) ) );
 		}
@@ -1540,8 +1347,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$min_conf  = (int) $this->get_option( 'proof_min_conf', '1' );
 		$tol_pico  = XmrPay_Util::xmr_to_pico( $this->get_option( 'proof_tolerance_xmr', '0' ) );
 		$exp_pico  = XmrPay_Util::xmr_to_pico( $amount );
-		// unknown confirmation state (neither in a block nor in the mempool) is never paid,
-		// even at min_conf 0 — only a mempool tx counts as 0-conf.
+
 		$cf        = array_key_exists( 'confirmations', $res ) ? $res['confirmations'] : null;
 		if ( null === $cf && empty( $res['in_pool'] ) ) {
 			wp_send_json( array( 'paid' => false, 'status' => 'pending', 'message' => __( 'Payment seen — waiting for confirmation. This page will update shortly.', 'nodewatch-monero' ) ) );
@@ -1556,7 +1362,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			wp_send_json( array( 'paid' => false, 'status' => $verdict['status'], 'message' => $msg ) );
 		}
 
-		// PAID. claim the txid (dedup) then complete via the shared mark_paid.
 		$order->update_meta_data( '_xmrpay_proof_txid', $txid );
 		$order->save();
 		$this->mark_paid( $order, array(
@@ -1570,7 +1375,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		wp_send_json( array( 'paid' => true, 'status' => 'paid' ) );
 	}
 
-	/** Has this txid already been claimed by a DIFFERENT order? (proof-mode replay guard) */
 	private function txid_used_elsewhere( $txid, $order_id ) {
 		$ids = wc_get_orders( array(
 			'limit'      => 2,
@@ -1586,7 +1390,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		return false;
 	}
 
-	/** Signed order.paid webhook from the agent. */
 	public function handle_webhook() {
 		$raw    = file_get_contents( 'php://input' );
 		$secret = (string) $this->get_option( 'webhook_secret' );
@@ -1600,9 +1403,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 		$data     = json_decode( $raw, true );
 
-		// replay defence: the agent stamps a signed event_ts (ms) inside the body.
-		// idempotency (is_paid in mark_paid) is the primary guard; this additionally
-		// drops a captured webhook replayed long after the fact (see event_fresh).
 		if ( is_array( $data ) && ! XmrPay_Util::event_fresh( isset( $data['event_ts'] ) ? $data['event_ts'] : null, time() ) ) {
 			status_header( 408 );
 			echo 'stale event';
@@ -1625,11 +1425,8 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		exit;
 	}
 
-	/** Idempotently mark an order paid, recording the full on-chain detail. */
 	private function mark_paid( $order, $data, $chain_verified = false ) {
-		// a signed webhook (or the status proxy) must only ever complete an order
-		// that is actually paying via this gateway — never resolve some other
-		// payment method's order by id.
+
 		if ( $order->get_payment_method() !== $this->id ) {
 			return;
 		}
@@ -1639,26 +1436,24 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( ! $chain_verified && ! in_array( (string) $order->get_meta( '_xmrpay_mode' ), array( '', 'agent' ), true ) ) {
 			return;
 		}
-		// atomic mutex (add_option-backed) — only one concurrent caller wins. prevents double
-		// payment_complete() under webhook + poll + cron overlap.
+
 		$lock_key = 'pay_' . $order->get_id();
 		if ( ! $this->acquire_lock( $lock_key, 30 ) ) {
 			return;
 		}
-		// re-fetch to pick up any state another process committed before we got the lock
+
 		$order = wc_get_order( $order->get_id() );
 		if ( ! $order || $order->is_paid() ) {
 			$this->release_lock( $lock_key );
 			return;
 		}
-		// Only the local chain verification paths may complete watch/proof orders.
+
 		$mode = (string) $order->get_meta( '_xmrpay_mode' );
 		if ( ! $chain_verified && ! in_array( $mode, array( '', 'agent' ), true ) ) {
 			$this->release_lock( $lock_key );
 			return;
 		}
-		// a late payment for a cancelled/refunded order must NOT silently resurrect
-		// it — the funds are in your wallet; flag it for the merchant to reconcile.
+
 		if ( in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed' ), true ) ) {
 			$order->add_order_note( sprintf(
 				/* translators: %s order status */
@@ -1669,34 +1464,27 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			$this->release_lock( $lock_key );
 			return;
 		}
-		// accept BOTH key styles: the signed webhook sends snake_case (received_xmr),
-		// the agent's GET /order/:id returns camelCase (receivedXmr). the reconcile
-		// cron + the buyer-poll path feed the latter, so fall back to it — otherwise
-		// an order completed via those paths would miss its received/overpaid detail.
+
 		$received_raw = isset( $data['received_xmr'] ) ? $data['received_xmr'] : ( $data['receivedXmr'] ?? null );
 		$overpaid_raw = isset( $data['overpaid_xmr'] ) ? $data['overpaid_xmr'] : ( $data['overpaidXmr'] ?? null );
 		$txid_list = isset( $data['txids'] ) && is_array( $data['txids'] ) ? array_values( array_map( 'sanitize_text_field', $data['txids'] ) ) : array();
-		$txids     = implode( ', ', $txid_list );                 // human-readable list → meta + note
-		$first_txid = $txid_list ? $txid_list[0] : '';            // a single hash for WC's _transaction_id
+		$txids     = implode( ', ', $txid_list );
+		$first_txid = $txid_list ? $txid_list[0] : '';
 		$received = $received_raw !== null ? sanitize_text_field( (string) $received_raw ) : '';
 		$confs    = isset( $data['confirmations'] ) ? absint( $data['confirmations'] ) : null;
 		$owed     = (string) $order->get_meta( '_xmrpay_amount' );
 		$overpaid     = ! empty( $data['overpaid'] );
 		$overpaid_xmr = $overpaid_raw !== null ? sanitize_text_field( (string) $overpaid_raw ) : '0';
 
-		// stash the payment detail on the order so the merchant has everything:
-		// what was owed, what landed, the confirmations, and the tx hash(es).
 		if ( $received !== '' ) { $order->update_meta_data( '_xmrpay_received', $received ); }
 		if ( $confs !== null ) { $order->update_meta_data( '_xmrpay_confirmations', $confs ); }
 		if ( $txids !== '' ) { $order->update_meta_data( '_xmrpay_txids', $txids ); }
-		// buyer sent MORE than owed — record the exact excess so the merchant can
-		// refund it (Monero is non-custodial: it must be sent back by hand).
+
 		if ( $overpaid ) {
 			$order->update_meta_data( '_xmrpay_overpaid', 'yes' );
 			$order->update_meta_data( '_xmrpay_overpaid_xmr', $overpaid_xmr );
 		}
-		// the signed receipt (if the agent minted one) — stored verbatim so the
-		// buyer can download + verify it even if the agent later goes offline.
+
 		if ( isset( $data['receipt'] ) && is_array( $data['receipt'] ) ) {
 			$order->update_meta_data( '_xmrpay_receipt', wp_json_encode( $data['receipt'] ) );
 		}
@@ -1714,11 +1502,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$order->add_order_note( $note );
 		$this->log( 'marked paid #' . $order->get_id() . ' · received ' . $received . ' · tx ' . $txids );
 
-		// payment_complete reduces stock, sets processing/completed, fires emails.
-		// pass a SINGLE tx hash (WC stores it as _transaction_id + builds the explorer
-		// link); the full list lives in _xmrpay_txids.
-		// finally ensures the lock is released even if payment_complete() throws (e.g. a
-		// hook error or DB failure between acquire and completion).
 		try {
 			$order->payment_complete( $first_txid );
 		} finally {
@@ -1726,7 +1509,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 	}
 
-	/** The buyer-facing refund claim-link for an order (the order_key is the bearer capability). */
 	private function refund_claim_url( $order ) {
 		return add_query_arg( array(
 			'wc-api'   => 'xmrpay_refund',
@@ -1735,13 +1517,11 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		), home_url( '/' ) );
 	}
 
-	/** Open (or top up) the non-custodial refund claim on an order: status, amount, expiry, a note with the link. */
 	private function open_refund_claim( $order, $amount ) {
 		$prev = (float) $order->get_meta( '_xmrpay_refund_amount' );
 		$order->update_meta_data( '_xmrpay_refund_amount', (string) ( $prev + (float) $amount ) );
 		$order->update_meta_data( '_xmrpay_refund_status', 'requested' );
-		// snapshot the expiry clock AT OPEN time, so changing the setting later never retroactively
-		// kills a link already in a buyer's inbox. window 0 = never expires.
+
 		$now    = time();
 		$window = XmrPay_Util::claim_window_from_days( $this->get_option( 'refund_link_days', '7' ) );
 		$order->update_meta_data( '_xmrpay_refund_opened', $now );
@@ -1761,42 +1541,27 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$order->add_order_note( $note );
 	}
 
-	/** Format a unix timestamp in the site's locale + timezone (for refund-link expiry display). */
 	private function fmt_dt( $ts ) {
 		return date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $ts );
 	}
 
-	/**
-	 * Cross-request atomic mutex. WordPress has NO atomic "add transient" — `add_option` is the
-	 * atomic primitive (a single INSERT that fails if the row already exists), so it is what
-	 * actually serialises concurrent callers on vanilla MySQL. Returns true only if THIS caller
-	 * acquired the lock. A lock older than $ttl seconds is reclaimed, so a crash between acquire
-	 * and release can't wedge it forever. Release with release_lock(). (autoload 'no' — never cached.)
-	 */
 	private function acquire_lock( $key, $ttl = 30 ) {
 		$opt = 'xmrpay_lock_' . get_current_blog_id() . '_' . $key;
 		if ( add_option( $opt, time() + (int) $ttl, '', 'no' ) ) {
 			return true;
 		}
 		$exp = (int) get_option( $opt );
-		if ( $exp > 0 && time() > $exp ) {   // stale (holder likely died) — reclaim atomically
+		if ( $exp > 0 && time() > $exp ) {
 			delete_option( $opt );
 			return (bool) add_option( $opt, time() + (int) $ttl, '', 'no' );
 		}
 		return false;
 	}
 
-	/** Release a mutex taken with acquire_lock(). */
 	private function release_lock( $key ) {
 		delete_option( 'xmrpay_lock_' . get_current_blog_id() . '_' . $key );
 	}
 
-	/**
-	 * WooCommerce refund hook (gateway 'refunds' support). Monero is non-custodial — we hold no
-	 * spend key and a Monero tx never reveals the sender, so we NEVER auto-send. Instead we open
-	 * a claim-link: the buyer supplies a receive address, the merchant pays it by hand and marks
-	 * it sent. Returning true lets WooCommerce record the refund line; no money moves here.
-	 */
 	public function process_refund( $order_id, $amount = null, $reason = '' ) {
 		$order = wc_get_order( $order_id );
 		if ( ! $order || $order->get_payment_method() !== $this->id ) {
@@ -1806,24 +1571,20 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( '' === $status ) {
 			$this->open_refund_claim( $order, $amount );
 		} elseif ( 'requested' === $status ) {
-			// claim still open, awaiting an address — just add the new amount to the same link.
+
 			$prev = (float) $order->get_meta( '_xmrpay_refund_amount' );
 			$order->update_meta_data( '_xmrpay_refund_amount', (string) ( $prev + (float) $amount ) );
 			$order->save();
 		} else {
-			// a NEW refund AFTER the buyer already gave an address (or one was already sent):
-			// REOPEN the claim so the buyer supplies an address for the extra amount, instead of
-			// the new money being silently stranded under a sent/address_provided status. The
-			// prior address + payout txid remain in the order notes for audit.
+
 			$order->delete_meta_data( '_xmrpay_refund_address' );
 			$order->delete_meta_data( '_xmrpay_refund_txid' );
 			$order->save();
-			$this->open_refund_claim( $order, $amount );   // status -> requested, amount +=, fresh link + note
+			$this->open_refund_claim( $order, $amount );
 		}
 		return true;
 	}
 
-	/** Checksum/network validation for buyer-supplied refund addresses. Fail closed if unavailable. */
 	private function address_checksum_ok( $addr ) {
 		if ( ! XmrPay_Util::crypto_ready() ) {
 			return false;
@@ -1835,12 +1596,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 	}
 
-	/**
-	 * Buyer-facing refund claim-link (wc-api=xmrpay_refund). GET renders an address-capture form;
-	 * POST stores the buyer's Monero receive address. The order_key is the bearer capability (the
-	 * same scheme as handle_verify); a nonce defends the POST against CSRF. No login required — the
-	 * buyer arrives from an email/message. Emits a standalone page and exits.
-	 */
 	public function handle_refund() {
 		$order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;
 		$key      = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
@@ -1856,17 +1611,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 		$num = $order->get_order_number();
 
-		// EXPIRY: a still-`requested` claim past its snapshotted window is dead. Once an address is
-		// captured the link is moot, so this only gates the requested state — and covers BOTH the
-		// GET form and the POST capture below. The merchant can reissue from the order screen.
 		$opened = (int) $order->get_meta( '_xmrpay_refund_opened' );
-		$window = (int) $order->get_meta( '_xmrpay_refund_window' );   // missing/0 = never (legacy claims too)
+		$window = (int) $order->get_meta( '_xmrpay_refund_window' );
 		if ( XmrPay_Util::claim_expired( $status, $opened, $window, time() ) ) {
 			$this->refund_page( __( 'Refund link expired', 'nodewatch-monero' ),
 				'<p>' . esc_html__( 'This refund link has expired. Please contact the store and they will send you a fresh one — your refund is safe.', 'nodewatch-monero' ) . '</p>', 410 );
 		}
 
-		// POST: the buyer submits their Monero receive address.
 		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : 'GET';
 		if ( 'POST' === $method ) {
 			$nonce = isset( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';
@@ -1884,10 +1635,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			if ( ! XmrPay_Util::is_address_like( $addr ) || ! $this->address_checksum_ok( $addr ) ) {
 				$this->refund_form_page( $order, $num, __( 'That is not a valid Monero address for this store (a typo, or an address from the wrong network). Please check it and try again.', 'nodewatch-monero' ) );
 			}
-			// capture the FIRST address only (a later visit must contact the store — stops anyone
-			// who later obtains the link from redirecting a not-yet-sent refund). acquire_lock +
-			// a FRESH status re-read make "first wins" atomic, so two concurrent POSTs of the same
-			// link can't both write (the 5s rate-limit above only narrows the window).
+
 			$caplock = 'rfcap_' . $order_id;
 			if ( $this->acquire_lock( $caplock, 30 ) ) {
 				$fresh = wc_get_order( $order_id );
@@ -1903,7 +1651,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'<p class="ok">' . esc_html__( 'Thank you. The store has your Monero address and will send your refund shortly.', 'nodewatch-monero' ) . '</p>' );
 		}
 
-		// GET on a claim that is past the form stage.
 		if ( 'sent' === $status ) {
 			$this->refund_page( __( 'Refund sent', 'nodewatch-monero' ),
 				'<p class="ok">' . esc_html__( 'This refund has already been paid. If you have not received it, contact the store.', 'nodewatch-monero' ) . '</p>' );
@@ -1912,11 +1659,10 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			$this->refund_page( __( 'Address on file', 'nodewatch-monero' ),
 				'<p>' . esc_html__( 'We already have your refund address and will send your refund shortly. To change the address, contact the store.', 'nodewatch-monero' ) . '</p>' );
 		}
-		// 'requested' → render the address form.
+
 		$this->refund_form_page( $order, $num, '' );
 	}
 
-	/** Render the address-capture form (and any validation error). Emits a page and exits. */
 	private function refund_form_page( $order, $num, $error ) {
 		$nonce  = wp_nonce_field( 'xmrpay_refund_' . $order->get_id(), '_wpnonce', true, false );
 		$action = esc_url( $this->refund_claim_url( $order ) );
@@ -1951,7 +1697,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$this->refund_page( __( 'Claim your refund', 'nodewatch-monero' ), $body );
 	}
 
-	/** Emit a minimal, self-contained (no CDN) claim-link page and exit. */
 	private function refund_page( $title, $body_html, $code = 200 ) {
 		status_header( $code );
 		nocache_headers();
@@ -1967,7 +1712,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			. '.err{color:#f87171;font-size:12px;margin-top:8px}.ok{color:#34d399}.meta{font-size:11px;color:#8b8b93}'
 			. '.note{font-size:12px;line-height:1.55;color:#c7c7cf;margin-top:16px;padding-left:11px;border-left:2px solid #ff6600}'
 			. '.brand{margin-top:24px;color:#8b8b93;font-size:11px}';
-		// $body_html is assembled above from esc_*/wp_nonce_field — safe by construction.
+
 		echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">'
 			. '<title>' . esc_html( $title ) . '</title><style>' . $css . '</style></head><body><div class="card"><h1>' . esc_html( $title ) . '</h1>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $css is hardcoded string literals, no user input
 			. $body_html // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- assembled from esc_*/wp_nonce_field
@@ -1975,10 +1720,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		exit;
 	}
 
-	/**
-	 * Admin: the merchant records the manual payout txid and marks the refund sent (audit trail).
-	 * admin-post.php handler, capability- and nonce-checked.
-	 */
 	public function handle_refund_sent() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'nodewatch-monero' ), '', array( 'response' => 403 ) );
@@ -1991,7 +1732,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 		$txid = isset( $_POST['txid'] ) ? strtolower( sanitize_text_field( wp_unslash( $_POST['txid'] ) ) ) : '';
 		if ( '' !== $txid && ! preg_match( '/^[0-9a-f]{64}$/', $txid ) ) {
-			$txid = '';   // ignore a malformed txid rather than store junk
+			$txid = '';
 		}
 		if ( '' !== $txid ) {
 			$order->update_meta_data( '_xmrpay_refund_txid', $txid );
@@ -2009,10 +1750,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		exit;
 	}
 
-	/**
-	 * Admin: reissue a refund claim-link — resets the expiry clock to NOW using the current
-	 * setting, keeping the claim `requested` so the same link works again. capability + nonce.
-	 */
 	public function handle_refund_reissue() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'nodewatch-monero' ), '', array( 'response' => 403 ) );
@@ -2023,7 +1760,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( ! $order || $order->get_payment_method() !== $this->id ) {
 			wp_die( esc_html__( 'Order not found.', 'nodewatch-monero' ), '', array( 'response' => 404 ) );
 		}
-		// only meaningful while still awaiting an address; never touch a captured/sent claim.
+
 		if ( 'requested' === (string) $order->get_meta( '_xmrpay_refund_status' ) ) {
 			$now    = time();
 			$window = XmrPay_Util::claim_window_from_days( $this->get_option( 'refund_link_days', '7' ) );
@@ -2043,28 +1780,18 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		exit;
 	}
 
-	/**
-	 * WooCommerce refund created OUTSIDE our gateway path (a "manual" refund that skipped
-	 * process_refund). Open the same claim-link so the buyer still gets one. If process_refund
-	 * already opened it, do nothing (avoids a duplicate note / double-counted amount).
-	 */
 	public function on_refunded( $order_id, $refund_id ) {
 		$order = wc_get_order( $order_id );
 		if ( ! $order || $order->get_payment_method() !== $this->id ) {
 			return;
 		}
 		if ( '' !== (string) $order->get_meta( '_xmrpay_refund_status' ) ) {
-			return;   // process_refund already opened the claim
+			return;
 		}
 		$refund = wc_get_order( $refund_id );
 		$this->open_refund_claim( $order, $refund ? $refund->get_amount() : '' );
 	}
 
-	/**
-	 * Monero payment details in the customer's order email (e.g. the "on hold"
-	 * email) so a buyer who closed the tab can still pay: the address, the amount,
-	 * and a link to the live payment page (QR + status). Skipped once paid.
-	 */
 	public function email_instructions( $order, $sent_to_admin, $plain_text = false ) {
 		if ( $sent_to_admin || ! $order || $order->get_payment_method() !== $this->id || $order->is_paid() ) {
 			return;
@@ -2074,9 +1801,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( $addr === '' ) {
 			return;
 		}
-		// the order-received page renders the QR + live status and works while the
-		// order is on-hold; the order-pay page does NOT (on-hold isn't a payable
-		// status, so it would redirect). link to order-received.
+
 		$pay_url = $order->get_checkout_order_received_url();
 
 		if ( $plain_text ) {

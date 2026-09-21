@@ -70,8 +70,8 @@ try {
 		$GLOBALS['fixture_auth'] = $auth;
 		$scanner = new XmrPay_Scanner( $node, 'mainnet', 2 );
 		ok( ucfirst( $auth ) . ' GET succeeds', 424242 === $scanner->tip_height() );
-		$reflection = new ReflectionMethod( XmrPay_Scanner::class, 'json_rpc' );
-		ok( ucfirst( $auth ) . ' POST succeeds', is_array( $reflection->invoke( $scanner, 'get_block', array( 'height' => 1 ) ) ) );
+		$scan = $scanner->scan_all( '', '', 1, 1 );
+		ok( ucfirst( $auth ) . ' POST succeeds', 1 === $scan['scanned_to'] );
 		$node[0]['password'] = 'wrong'; $bad = new XmrPay_Scanner( $node, 'mainnet', 2 ); $bad->tip_height();
 		ok( ucfirst( $auth ) . ' wrong credentials return 401', 'unauthorized' === ( $bad->last_node_error()['code'] ?? '' ) );
 	}

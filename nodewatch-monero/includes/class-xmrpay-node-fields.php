@@ -1,4 +1,5 @@
 <?php
+// Render and validate merchant daemon settings.
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 final class XmrPay_Node_Fields {

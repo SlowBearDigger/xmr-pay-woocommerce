@@ -132,5 +132,17 @@ $GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/get_transactions' ] = array( 'txs' 
 $scan = $multi->scan_all( $ADDR, $VIEW, 100, 100, array( 'tip' => 110 ) );
 ok( 'matching block and tx advance scan', $scan['scanned_to'] === 100 );
 
+
+$GLOBALS['MOCK_TX_RESPONSES'] = array();
+$GLOBALS['MOCK_TX_RESPONSES']['http://127.0.0.1:1/json_rpc'] = array('result' => array(
+    'block_header' => array('height' => 100, 'num_txes' => 0),
+    'json' => '{"tx_hashes":[]}'
+));
+$scan = $sc->scan_all($ADDR, $VIEW, 100, 100, array('tip' => 110));
+ok('empty daemon block with hashes in JSON advances checkpoint', $scan['scanned_to'] === 100);
+$GLOBALS['MOCK_TX_RESPONSES']['http://127.0.0.1:1/json_rpc'] = array('result' => array());
+$scan = $sc->scan_all($ADDR, $VIEW, 100, 100, array('tip' => 110));
+ok('missing block evidence cannot advance checkpoint', $scan['scanned_to'] === 99);
+
 echo "\n" . ( 0 === $fail ? 'ALL GREEN' : 'FAILED' ) . " — $pass passed, $fail failed\n";
 exit( 0 === $fail ? 0 : 1 );

@@ -1,4 +1,5 @@
 <?php
+// Validate daemon connections and redact their credentials.
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 final class XmrPay_Node_Config {

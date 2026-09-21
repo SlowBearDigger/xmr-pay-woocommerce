@@ -1,6 +1,4 @@
-// xmr-pay admin: the gateway settings "Test connection" (agent) and "Check setup"
-// (no-server) buttons. Data (ajaxurl, nonces, strings) comes from window.xmrpayAdmin
-// via wp_localize_script. Moved out of inline <script> blocks for Plugin Check.
+// Handle merchant payment settings and refund actions.
 (function () {
 	var A = window.xmrpayAdmin || {};
 	function val(id) { var e = document.getElementById(id); return e ? (e.value || '').trim() : ''; }
@@ -26,7 +24,6 @@
 		return setInterval(render, 250);
 	}
 
-	// Agent mode — "Test connection"
 	var agentBtn = document.getElementById('xmrpay-test-agent');
 	if (agentBtn) {
 		var out = document.getElementById('xmrpay-test-result');
@@ -41,7 +38,6 @@
 		});
 	}
 
-	// No-server modes — "Check setup": node + network + view-key-matches-address
 	var nodeBtn = document.getElementById('xmrpay-test-node');
 	if (nodeBtn) {
 		var nout = document.getElementById('xmrpay-node-result');

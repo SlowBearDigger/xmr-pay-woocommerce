@@ -66,7 +66,7 @@ ok( 'GET sends Basic authorization and disables redirects', ( $get['headers']['A
 reset_auth_test();
 $GLOBALS['auth_responses'][] = auth_test_response( 200, array( 'txs' => array() ) );
 $scanner = new XmrPay_Scanner( $basic );
-$scanner->fetch_txs( array( 'abc' ) );
+$scanner->fetch_txs( array( str_repeat( 'a', 64 ) ) );
 $post = $GLOBALS['auth_requests'][0]['args'];
 ok( 'POST sends Basic authorization and disables redirects', ( $post['headers']['Authorization'] ?? '' ) === 'Basic ' . base64_encode( 'alice:secret' ) && $post['redirection'] === 0 );
 

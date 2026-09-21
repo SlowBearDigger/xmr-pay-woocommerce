@@ -1,5 +1,4 @@
-// xmr-pay guided setup wizard. Data (ajaxurl, nonces, hasConst, strings) comes from
-// window.xmrpayWizard via wp_localize_script. Moved out of an inline <script> for Plugin Check.
+// Guide merchant payment setup.
 (function () {
 	var W = window.xmrpayWizard || {};
 	var T = W.i18n || {};
@@ -55,7 +54,6 @@
 		show(step + 1);
 	});
 
-	// live connection test (agent mode; reuses the gateway's ajax_test_agent)
 	function runTest(cb){
 		var out = document.getElementById('xp-test-result');
 		var url = (val('xp-agent-url')||'').trim(), token = (val('xp-agent-token')||'').trim();
@@ -70,7 +68,7 @@
 			})
 			.catch(function(){ tested=false; if(out){out.style.color='#b91c1c';out.textContent='✗ '+(T.reqfail||'request failed');} if(cb)cb(false); });
 	}
-	// no-server "Test setup": node + network + view-key-matches-address
+
 	function testNode(){
 		var out = document.getElementById('xp-node-result'); if(!out) return;
 		var list=document.getElementById('xp-node-list'),rows=nodeRows(),timer=startNodeTimer(out,list,rows.length);

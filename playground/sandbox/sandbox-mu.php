@@ -1,4 +1,5 @@
 <?php
+// Provide development-only WooCommerce sandbox helpers.
 /**
  * Plugin Name: xmr-pay Live Sandbox
  * Description: Auto-signs visitors in as a store manager on the public stagenet WP at live.xmrpay.shop, with the server locked down. The "configure it yourself" demo.
@@ -9,8 +10,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 const XMRPAY_SB_USER = 'sandbox';
 
-// 1) auto sign-in every visitor as the limited store manager (except wp-login, so
-//    the owner can still sign in as the real admin).
 add_action( 'init', function () {
 	if ( is_user_logged_in() ) {
 		return;
@@ -30,8 +29,6 @@ add_action( 'init', function () {
 	wp_set_auth_cookie( $u->ID, true );
 }, 1 );
 
-// 2) defence in depth — deny server-level capabilities for the sandbox user even
-//    if the role drifts. (DISALLOW_FILE_MODS in wp-config is the hard guard.)
 add_filter( 'user_has_cap', function ( $allcaps, $caps, $args, $user ) {
 	if ( ! $user || ! isset( $user->user_login ) || $user->user_login !== XMRPAY_SB_USER ) {
 		return $allcaps;
@@ -48,16 +45,12 @@ add_filter( 'user_has_cap', function ( $allcaps, $caps, $args, $user ) {
 	return $allcaps;
 }, 99, 4 );
 
-// 3) privacy: never store the buyer's IP address or user-agent on orders.
-//    (WooCommerce core records these on every order; this strips them. Monero is
-//    irreversible — no chargebacks — so there's no reason to keep them.)
 add_action( 'woocommerce_checkout_create_order', function ( $order ) {
 	$order->set_customer_ip_address( '' );
 	$order->set_customer_user_agent( '' );
 }, 999 );
 add_filter( 'woocommerce_order_get_customer_ip_address', '__return_empty_string', 999 );
 
-// 4) a sandbox banner on the storefront (fixed top bar, theme-independent).
 add_action( 'wp_head', function () {
 	if ( is_admin() ) {
 		return;
@@ -84,7 +77,6 @@ add_action( 'wp_footer', function () {
 		. '<a href="https://xmrpay.shop/demo.html">How it works</a></div>';
 } );
 
-// 4) admin notice explaining the sandbox.
 add_action( 'admin_notices', function () {
 	$wizard = admin_url( 'admin.php?page=xmrpay-setup' );
 	echo '<div class="notice notice-info"><p><strong>xmr-pay live sandbox.</strong> '

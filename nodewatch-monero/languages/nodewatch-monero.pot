@@ -202,7 +202,7 @@ msgid "Agent token"
 msgstr ""
 
 #: includes/class-wc-gateway-xmrpay.php:168
-msgid "The AGENT_TOKEN you set on the agent (optional, but recommended)."
+msgid "The AGENT_TOKEN configured on the agent. Required in Agent mode, including for localhost connections."
 msgstr ""
 
 #: includes/class-wc-gateway-xmrpay.php:171

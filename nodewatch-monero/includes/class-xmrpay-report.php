@@ -1,16 +1,10 @@
 <?php
-/**
- * Monero payments report — an admin page listing every xmr-pay order (owed / received /
- * overpaid / confirmations / invoice state / refund status / txids), with a server-side CSV
- * export. Tier 0: pure WordPress admin, no server, no third party. Every value is already in
- * _xmrpay_* order meta. Per-store isolation holds (wc_get_orders is store-scoped). The column
- * schema mirrors the lib's src/report.js ordersToCsv so the agent's /orders.csv and this page
- * speak the same columns.
- */
+// Export merchant payment and refund reports.
+
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-require_once __DIR__ . '/class-xmrpay-util.php';   // claim_expired (effective refund status)
+require_once __DIR__ . '/class-xmrpay-util.php';
 
 class XmrPay_Report {
 
@@ -18,7 +12,6 @@ class XmrPay_Report {
 	const GATEWAY = 'xmrpay';
 	const PER_PAGE = 50;
 
-	/** Canonical CSV/report columns (mirror of src/report.js CORE_COLUMNS + WC extras). */
 	public static function columns() {
 		return array( 'order', 'date', 'wc_status', 'state', 'owed_xmr', 'received_xmr', 'overpaid_xmr', 'confirmations', 'mode', 'refund_status', 'txids' );
 	}
@@ -39,7 +32,6 @@ class XmrPay_Report {
 		);
 	}
 
-	/** One order -> a row keyed by columns(). Static so the table + CSV share exactly one mapping. */
 	public static function order_row( $order ) {
 		$received = (string) $order->get_meta( '_xmrpay_received' );
 		return array(
@@ -57,7 +49,6 @@ class XmrPay_Report {
 		);
 	}
 
-	/** Stored refund status, overlaid with 'expired' when a still-`requested` claim-link has lapsed. */
 	private static function effective_refund_status( $order ) {
 		$st = (string) $order->get_meta( '_xmrpay_refund_status' );
 		if ( 'requested' === $st && XmrPay_Util::claim_expired( $st, (int) $order->get_meta( '_xmrpay_refund_opened' ), (int) $order->get_meta( '_xmrpay_refund_window' ), time() ) ) {
@@ -66,10 +57,6 @@ class XmrPay_Report {
 		return $st;
 	}
 
-	/**
-	 * Derive the canonical invoice state from the WC order (the plugin maps straight to WC
-	 * statuses and persists no _xmrpay_status). Mirrors XmrPay_Util::to_invoice_state's codomain.
-	 */
 	private static function derive_state( $order, $received ) {
 		if ( $order->is_paid() ) {
 			return 'settled';
@@ -88,7 +75,7 @@ class XmrPay_Report {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			return;
 		}
-		// read-only pagination param; no state change, so no nonce needed.
+
 		$paged = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$res   = wc_get_orders( array(
 			'limit'          => self::PER_PAGE,
@@ -162,7 +149,6 @@ class XmrPay_Report {
 		echo '</div>';
 	}
 
-	/** Stream every xmr-pay order as a CSV download (batched, memory-safe). */
 	public function export_csv() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'nodewatch-monero' ), '', array( 'response' => 403 ) );
@@ -201,7 +187,6 @@ class XmrPay_Report {
 		exit;
 	}
 
-	/** Neutralise spreadsheet formula injection: a leading =,+,-,@,tab,CR becomes text. */
 	public static function csv_safe( $value ) {
 		$value = (string) $value;
 		if ( '' !== $value && false !== strpos( "=+-@\t\r", $value[0] ) ) {

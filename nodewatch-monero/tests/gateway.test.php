@@ -21,6 +21,17 @@ function get_current_blog_id() { return 1; }
 function get_transient( $k ) { return $GLOBALS['TRANSIENTS'][ $k ] ?? false; }
 function wc_get_orders( $args ) { return $GLOBALS['PENDING_IDS'] ?? array(); }
 function is_wp_error( $t ) { return $t instanceof WP_Error; }
+function set_transient( $key, $value, $ttl ) { $GLOBALS['TRANSIENTS'][$key] = $value; }
+function delete_transient( $key ) { unset( $GLOBALS['TRANSIENTS'][$key] ); }
+function wp_json_encode( $value ) { return json_encode( $value ); }
+function wp_safe_remote_get( $url, $args ) { return array( 'response' => array( 'code' => 200 ), 'body' => '{"height":100}' ); }
+function wp_safe_remote_post( $url, $args ) {
+    $height = json_decode( $args['body'], true )['params']['height'];
+    $block = $height < 100 ? array( 'result' => array( 'block_header' => array( 'height' => $height, 'num_txes' => 0 ), 'tx_hashes' => array() ) ) : array();
+    return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $block ) );
+}
+function wp_remote_retrieve_response_code( $response ) { return $response['response']['code']; }
+function wp_remote_retrieve_body( $response ) { return $response['body']; }
 class WP_Error { public $code; public $msg; public function __construct( $c = '', $m = '' ) { $this->code = $c; $this->msg = $m; } public function get_error_message() { return $this->msg; } }
 class WC_Payment_Gateway { public $id; public $supports = array(); }   // stub base — ctor skipped below
 
@@ -57,6 +68,12 @@ function wc_get_order( $id ) { return isset( $GLOBALS['ORDERS'][ $id ] ) ? $GLOB
 
 $pass = 0; $fail = 0;
 function ok( $name, $cond, $extra = '' ) { global $pass, $fail; if ( $cond ) { $pass++; echo "PASS  $name\n"; } else { $fail++; echo "FAIL  $name" . ( '' !== $extra ? "  — $extra" : '' ) . "\n"; } }
+
+class XmrPay_Agent {
+    public static $response = array();
+    public function __construct( ...$args ) {}
+    public function get_order( ...$args ) { return self::$response; }
+}
 
 $gw = new TestGateway();
 
@@ -124,6 +141,29 @@ foreach ( array( 'watch', 'proof' ) as $mode ) {
     $mark_paid->invoke( $gw, $order, array( 'paid' => true, 'txids' => array( str_repeat( 'a', 64 ) ) ) );
     ok( $mode . ' ignores agent completion', 'on-hold' === $order->get_status() );
 }
+
+$agent_order = new FakeOrder( 506 );
+$agent_order->update_meta_data( '_xmrpay_mode', 'agent' );
+$agent_order->update_meta_data( '_xmrpay_address', 'merchant-subaddress' );
+$GLOBALS['ORDERS'][506] = $agent_order;
+$GLOBALS['PENDING_IDS'] = array( 506 );
+TestGateway::$opts['agent_url'] = 'http://127.0.0.1:8792';
+foreach ( array( 'pendingXmr' => '0.01', 'lockedXmr' => '0.01', 'syncing' => true ) as $key => $value ) {
+    XmrPay_Agent::$response = array( 'paid' => false, 'receivedXmr' => '0', $key => $value );
+    $gw->expire_orders();
+    ok( $key . ' prevents agent order expiry', $agent_order->get_status() === 'on-hold' );
+}
+XmrPay_Agent::$response = array( 'paid' => false, 'receivedXmr' => '0', 'pendingXmr' => '0', 'lockedXmr' => '0', 'syncing' => false );
+$gw->expire_orders();
+ok( 'synced unpaid agent order can expire', $agent_order->get_status() === 'cancelled' );
+
+$watch->update_meta_data( '_xmrpay_birthday', 99 );
+$watch->update_meta_data( '_xmrpay_amount', '0.01' );
+TestGateway::$opts['view_key'] = str_repeat( 'a', 64 );
+$GLOBALS['TRANSIENTS'] = array();
+$GLOBALS['PENDING_IDS'] = array( 303 );
+$gw->expire_orders();
+ok( 'watch expiry checks the last existing block, not the chain length', $watch->get_status() === 'cancelled' );
 
 echo "\n" . ( $fail ? 'FAILED' : 'ALL GREEN' ) . "  $pass passed, $fail failed\n";
 exit( $fail ? 1 : 0 );

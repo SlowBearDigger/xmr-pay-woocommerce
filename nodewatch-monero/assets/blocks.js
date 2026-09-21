@@ -1,6 +1,4 @@
-// Register the Monero gateway in the WooCommerce Blocks (React) checkout, so it
-// appears as a payment option. Order processing still runs through the classic
-// gateway's process_payment(); this is just the Blocks-side presence + label.
+// Register the WooCommerce payment block.
 (function () {
 	var registry = window.wc && window.wc.wcBlocksRegistry;
 	var settingsApi = window.wc && window.wc.wcSettings;

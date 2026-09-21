@@ -1,15 +1,6 @@
 <?php
-/**
- * Thin HTTP client for the xmr-pay scanner-agent.
- *
- * The agent (Node + monero-ts) does all the Monero work — view-only scanning,
- * per-order subaddresses, summing, the time-lock gate. This plugin never touches
- * Monero crypto: it just creates orders and reads their status over HTTP. The
- * agent runs on the merchant's own box (localhost); the buyer's
- * browser never reaches it — the plugin proxies status checks server-side.
- *
- * @link https://github.com/SlowBearDigger/xmr-pay  (docs/AGENT.md)
- */
+// Call the local authenticated payment agent.
+
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
@@ -32,10 +23,6 @@ class XmrPay_Agent {
 		return $h;
 	}
 
-	/**
-	 * Create an order → returns the per-order subaddress to show the buyer.
-	 * @return array|WP_Error { id, address, amount, status, birthdayHeight }
-	 */
 	public function create_order( $amount, $id, $label = '' ) {
 		$res = wp_remote_post( $this->url . '/order', array(
 			'timeout' => 20,
@@ -49,10 +36,6 @@ class XmrPay_Agent {
 		return $this->decode( $res, array( 200 ) );
 	}
 
-	/**
-	 * Live status of an order.
-	 * @return array|WP_Error { paid, status, receivedXmr, shortfallXmr, confirmations, txids }
-	 */
 	public function get_order( $id, $timeout = 20 ) {
 		$res = wp_remote_get( $this->url . '/order/' . rawurlencode( (string) $id ), array(
 			'timeout' => max( 2, (int) $timeout ),
@@ -61,10 +44,6 @@ class XmrPay_Agent {
 		return $this->decode( $res, array( 200 ) );
 	}
 
-	/**
-	 * The signed receipt for a paid order — the envelope to hand the buyer.
-	 * @return array|WP_Error the signed receipt envelope { typ, receipt, pubkey, fingerprint, sig }
-	 */
 	public function get_receipt( $id, $timeout = 20 ) {
 		$res = wp_remote_get( $this->url . '/receipt/' . rawurlencode( (string) $id ), array(
 			'timeout' => max( 2, (int) $timeout ),
@@ -73,7 +52,6 @@ class XmrPay_Agent {
 		return $this->decode( $res, array( 200 ) );
 	}
 
-	/** Liveness — used by the settings "Test connection" button. */
 	public function healthz() {
 		$res = wp_remote_get( $this->url . '/healthz', array( 'timeout' => 10, 'headers' => $this->headers() ) );
 		return $this->decode( $res, array( 200 ) );

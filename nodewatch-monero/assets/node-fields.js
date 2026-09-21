@@ -1,3 +1,4 @@
+// Edit and test merchant daemon connections.
 (function () {
 	function listText(list, key, fallback) {
 		return (list && list.getAttribute('data-' + key)) || fallback;

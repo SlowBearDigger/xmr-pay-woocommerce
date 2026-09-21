@@ -1,24 +1,13 @@
 <?php
-/**
- * Guided setup wizard — mode-aware onboarding, leading with the no-server default.
- *
- * Four steps: (0) pick how to verify — Auto-detect in WordPress (recommended,
- * no server), "Buyer taps I've paid", or the advanced Agent mode; (1) Connect —
- * for the no-server modes, your address / view key / node with a LIVE "Test setup"
- * check (node reachable, network, and that the view key matches the address); for
- * Agent mode, the Agent URL / token / webhook with a live connection test;
- * (2) pricing; (3) go live.
- *
- * It writes straight into the gateway's own settings option (incl. `mode`), so
- * everything stays editable afterwards in WooCommerce → Settings → Payments → Monero.
- */
+// Configure merchant payment settings.
+
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class XmrPay_Setup {
 
 	const PAGE       = 'xmrpay-setup';
-	const OPTION     = 'woocommerce_xmrpay_settings';   // WC stores gateway settings here
+	const OPTION     = 'woocommerce_xmrpay_settings';
 	const REDIRECT_T = 'xmrpay_activation_redirect';
 
 	public function __construct() {
@@ -27,19 +16,16 @@ class XmrPay_Setup {
 		add_action( 'admin_notices', array( $this, 'setup_notice' ) );
 		add_action( 'wp_ajax_xmrpay_setup_save', array( $this, 'ajax_save' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
-		// a "Run setup wizard" shortcut from the plugins list row.
+
 		add_filter( 'plugin_action_links_' . plugin_basename( XMRPAY_WC_FILE ), array( $this, 'plugin_links' ) );
 	}
 
-	/** Mark a fresh activation so we can offer the wizard once (set from the main file's activation hook). */
 	public static function flag_activation() {
 		set_transient( self::REDIRECT_T, 1, 60 );
 	}
 
 	public function register_page() {
-		// real page under the WooCommerce menu so it has a home + capability check,
-		// but hidden from the submenu (reached via the notice / plugins-list link /
-		// the button on the gateway settings) to avoid permanent menu clutter.
+
 		add_submenu_page(
 			'woocommerce',
 			__( 'Monero payments — Setup', 'nodewatch-monero' ),
@@ -48,15 +34,10 @@ class XmrPay_Setup {
 			self::PAGE,
 			array( $this, 'render' )
 		);
-		// Hide it from the submenu for display only — defer the removal to admin_head,
-		// which runs AFTER user_can_access_admin_page() but BEFORE the menu is drawn.
-		// Removing it here (on admin_menu) would make direct-URL access — the post-
-		// activation redirect, the notice button, the plugins-list link — fail with
-		// "Sorry, you are not allowed to access this page."
+
 		add_action( 'admin_head', array( $this, 'hide_from_menu' ) );
 	}
 
-	/** Remove the wizard from the visible submenu without breaking direct access. */
 	public function hide_from_menu() {
 		remove_submenu_page( 'woocommerce', self::PAGE );
 	}
@@ -67,13 +48,12 @@ class XmrPay_Setup {
 		return $links;
 	}
 
-	/** One-time redirect into the wizard right after activation (single, non-bulk). */
 	public function maybe_redirect_on_activate() {
 		if ( ! get_transient( self::REDIRECT_T ) ) {
 			return;
 		}
 		delete_transient( self::REDIRECT_T );
-		// don't hijack bulk activations or non-interactive contexts.
+
 		if ( isset( $_GET['activate-multi'] ) || wp_doing_ajax() || ! current_user_can( 'manage_woocommerce' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- presence-only flag check, capability-gated
 			return;
 		}
@@ -81,7 +61,6 @@ class XmrPay_Setup {
 		exit;
 	}
 
-	/** Nudge toward the wizard until the gateway has been configured + enabled. */
 	public function setup_notice() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			return;
@@ -91,10 +70,9 @@ class XmrPay_Setup {
 			return;
 		}
 		if ( $screen->id === 'woocommerce_page_' . self::PAGE ) {
-			return; // already on the wizard
+			return;
 		}
-		// keep the nudge limited (Guideline 11): only on the dashboard, the plugins
-		// list, and WooCommerce screens — not scattered across all of wp-admin.
+
 		$allowed = in_array( $screen->id, array( 'dashboard', 'plugins' ), true )
 			|| 0 === strpos( (string) $screen->id, 'woocommerce_page_' )
 			|| 'shop_order' === $screen->post_type
@@ -117,7 +95,6 @@ class XmrPay_Setup {
 			' <a href="' . esc_url( $url ) . '" class="button button-primary" style="margin-left:6px">' . esc_html__( 'Run the setup wizard', 'nodewatch-monero' ) . '</a></p></div>';
 	}
 
-	/** AJAX: persist the wizard's choices into the gateway settings option, enable the gateway. */
 	public function ajax_save() {
 		if ( ! current_user_can( 'manage_woocommerce' ) || ! check_ajax_referer( 'xmrpay_setup_save', '_wpnonce', false ) ) {
 			wp_send_json_error( array( 'msg' => __( 'not allowed', 'nodewatch-monero' ) ) );
@@ -134,7 +111,6 @@ class XmrPay_Setup {
 		$cfg['title']          = $text( 'title' ) !== '' ? $text( 'title' ) : __( 'Monero (XMR)', 'nodewatch-monero' );
 		$cfg['checkout_theme'] = in_array( $text( 'checkout_theme' ), array( 'light', 'dark' ), true ) ? $text( 'checkout_theme' ) : 'light';
 
-		// the mode the merchant chose (default = the no-server auto-detect).
 		$mode          = in_array( $text( 'mode' ), array( 'watch', 'proof', 'agent' ), true ) ? $text( 'mode' ) : 'watch';
 		$cfg['mode']   = $mode;
 		if ( 'agent' === $mode ) {
@@ -146,13 +122,12 @@ class XmrPay_Setup {
 			$cfg['agent_token']    = $text( 'agent_token' );
 			$cfg['webhook_secret'] = $text( 'webhook_secret' );
 		} else {
-			// no-server modes: address + view key + node(s) live in WordPress.
+
 			$cfg['xmr_address'] = $text( 'xmr_address' );
-			// only overwrite the stored view key if one was entered (a wp-config
-			// constant or a previously-saved value should not be blanked).
+
 			$vk = $text( 'view_key' );
 			if ( '' !== $vk ) { $cfg['view_key'] = $vk; }
-			// sanitize each comma-separated node URL with esc_url_raw (preserves port + path, strips XSS chars)
+
 			$raw_rows = isset( $_POST['node_configs'] ) ? wp_unslash( $_POST['node_configs'] ) : array();
 			$nodes = XmrPay_Node_Config::sanitize_submission( $raw_rows, $cfg['node_configs'] ?? ( $cfg['nodes'] ?? array() ) );
 			if ( is_wp_error( $nodes ) ) { wp_send_json_error( array( 'msg' => $nodes->get_error_message() ) ); }
@@ -169,8 +144,6 @@ class XmrPay_Setup {
 			$cfg['coingecko_api_key'] = $text( 'coingecko_api_key' );
 		}
 
-		// keep the merchant's existing description rather than blanking it; only set
-		// a default the first time through.
 		if ( empty( $cfg['description'] ) ) {
 			$cfg['description'] = __( 'Pay privately with Monero. Scan the QR — your wallet fills in the exact amount.', 'nodewatch-monero' );
 		}
@@ -183,7 +156,6 @@ class XmrPay_Setup {
 		) );
 	}
 
-	/** Enqueue the wizard JS + localised data on the setup page only. */
 	public function enqueue( $hook ) {
 		if ( 'woocommerce_page_' . self::PAGE !== $hook ) {
 			return;
@@ -229,7 +201,7 @@ class XmrPay_Setup {
 		$cur_mode     = in_array( $g( 'mode', 'watch' ), array( 'watch', 'proof', 'agent' ), true ) ? $g( 'mode', 'watch' ) : 'watch';
 		$is_xmr_store = function_exists( 'get_woocommerce_currency' ) && get_woocommerce_currency() === 'XMR';
 		$store_cur    = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD';
-		// nonces + the wizard's JS are enqueued/localised in enqueue() (assets/wizard.js).
+
 		$cur_url      = admin_url( 'admin.php?page=wc-settings&tab=general' );
 		$full_url     = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=xmrpay' );
 		?>
@@ -412,7 +384,7 @@ class XmrPay_Setup {
 				</div>
 			</div>
 
-			<?php // wizard behaviour lives in assets/wizard.js (enqueued + localised in enqueue()) ?>
+			<?php  ?>
 		</div>
 		<?php
 	}
