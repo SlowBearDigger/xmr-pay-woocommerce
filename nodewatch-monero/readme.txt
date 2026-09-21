@@ -9,14 +9,14 @@ Stable tag: 1.1.4
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
-Accept Monero (XMR) in WooCommerce, non-custodial, with no backend. WordPress verifies payments itself; funds go straight to your own wallet.
+Accept Monero (XMR) in WooCommerce, non-custodial, without a separate payment daemon in native modes. WordPress verifies payments itself; funds go straight to your own wallet.
 
 == Description ==
 
-**Nodewatch Monero Payments for WooCommerce** lets your store accept Monero with **no third party in the payment path** and **no backend to run**. WordPress verifies payments itself, in PHP, against a public Monero node, the plugin never holds funds or a spend key.
+**Nodewatch Monero Payments for WooCommerce** lets your store accept Monero with **no third party in the payment path** and **no separate payment daemon in native modes**. WordPress verifies payments itself, in PHP, against a public Monero node, the plugin never holds funds or a spend key.
 
 * **Non-custodial.** Each order is paid to *your* wallet. You control the funds on-chain; no one else can move them.
-* **No backend, no middleman, no API keys, no accounts.** The two default modes do the Monero crypto in pure PHP (vendored, audited), no Node, no `monero-wallet-rpc`, nothing running 24/7. The only external thing needed is a Monero node (a public one is fine); your view key never leaves your server.
+* **Native PHP verification.** Watch and proof modes run inside WordPress with bundled cryptographic components. They need configured Monero nodes; fiat pricing may also use CoinGecko. The view key stays on your server.
 * **Three modes, you choose.** *Auto-detect in WordPress* (recommended, no buyer action, WordPress scans the chain); *Buyer taps "I've paid"* (the lightest, the buyer pastes the transaction ID); or *Agent* (advanced, run the separate `xmr-pay` daemon).
 * **Blocks + classic checkout, HPOS-ready.** Shows up at the modern WooCommerce Blocks checkout and the classic one.
 * **Exact amounts.** Conversions are computed in piconero (integer math, GMP), no float drift. Discounts, shipping, taxes and fees are already in the order total, so they "just work".
@@ -30,7 +30,7 @@ Accept Monero (XMR) in WooCommerce, non-custodial, with no backend. WordPress ve
 
 **Agent** (advanced): you run the separate [xmr-pay daemon](https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/AGENT.md); it holds the view key and notifies the store with a signed webhook.
 
-The two default modes need **no server**, just your WordPress + a Monero node. Requires the PHP **GMP** and **BCMath** extensions. Full guide: the FAQ at https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/FAQ.md
+The two native modes need WordPress and a Monero node, with no separate payment process. Requires the PHP **GMP** and **BCMath** extensions. Full guide: the FAQ at https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/FAQ.md
 
 = Pricing =
 
@@ -47,7 +47,7 @@ Default (no server, recommended):
 
 = Authenticated nodes =
 
-Authentication is configured separately for every node. Choose **None** for an open RPC endpoint, **Basic** for HTTP Basic authentication, or **Digest** for HTTP Digest authentication, then enter that node's username and password. Credentials stay attached to that node and are not reused for another node during failover. Digest requires PHP's cURL extension. Use HTTPS or a private network for Basic authentication, because Basic credentials are encoded but not encrypted.
+Authentication is configured separately for every node. Choose **None** for an open RPC endpoint, **Basic** for HTTP Basic authentication, or **Digest** for HTTP Digest authentication, then enter that node's username and password. Credentials stay attached to their node. Native payment verification requires all configured nodes to answer and agree. Digest requires PHP's cURL extension. Use HTTPS or a private network for Basic authentication, because Basic credentials are encoded but not encrypted.
 
 Example for Umbrel on a private network: enter `http://umbrel.local:18081` as the node URL, then choose the authentication type and credentials configured on that Umbrel RPC endpoint. Do not put credentials in the URL. Prefer a dedicated, read-only RPC account where the node or reverse proxy supports one, and use different credentials for different nodes.
 
@@ -55,7 +55,7 @@ Example for Umbrel on a private network: enter `http://umbrel.local:18081` as th
 
 For the no-server modes, enable both **GMP** and **BCMath** in the PHP runtime that executes WordPress. Installing them only in the Monero-node container or only for command-line PHP is not enough. In a container setup, install/enable `ext-gmp` and `ext-bcmath` in the WordPress/PHP image and restart that container.
 
-Advanced (Agent mode): run the separate `xmr-pay` daemon (`npm i xmr-pay monero-ts`, then `scanner-agent.js` with your address + view key + node + a webhook secret, bound to localhost, see `docs/AGENT.md`), choose the **Agent** mode, and set the Agent URL / token / webhook secret it prints.
+Advanced (Agent mode): run `npx xmr-pay` on the WordPress host, choose **Agent** mode and copy the local Agent URL, token and webhook secret from setup. The token is mandatory even on loopback. For manual installation or upgrades, follow https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/AGENT.md and its dependency guidance.
 
 == Frequently Asked Questions ==
 
@@ -80,6 +80,9 @@ Both. Use a matching address + node (and view key) for the network you want. The
 = Where can I test it? =
 https://demo.xmrpay.shop, a public stagenet demo. Grab test XMR from a stagenet faucet and try the full flow.
 
+= What happens when an order expires? =
+Automatic expiry is disabled by default. If enabled, detected funds keep an order open, but native watch mode may not see a transfer still in the mempool and proof mode needs the buyer's transaction ID. Late or unseen payments may need manual reconciliation. Setup health warnings also need attention: one reachable node is enough for a diagnostic result, but native payment verification requires all configured nodes.
+
 == Screenshots ==
 
 1. One configured node in WooCommerce settings.
@@ -95,7 +98,7 @@ This plugin does **not** track you or your customers, sends **no** analytics, an
 
 1. **A Monero node** (the node URL you enter in the settings, a public one or your own). In the no-server modes, the plugin sends transaction IDs and chain-height queries over HTTP to read the blockchain (daemon RPC: `get_transactions`, `get_block`, `get_height`, `get_info`). No personal data is sent; the node sees the transaction ID it is asked about and your server's IP. The node is yours to choose, so you choose who you trust, run your own for maximum privacy. (Default suggestion: a community stagenet node for testing.)
 
-2. **CoinGecko**, *only* if you price your store in a fiat currency and choose the "CoinGecko" price source. The plugin requests the current Monero price for your currency from `https://api.coingecko.com`. No store or customer data is sent (only the currency code). You can avoid it entirely by pricing your store in XMR, using a fixed rate, or using your own price URL. CoinGecko terms: https://www.coingecko.com/en/terms · privacy: https://www.coingecko.com/en/privacy
+2. **CoinGecko**, *only* if you price your store in a fiat currency and choose the "CoinGecko" price source. The plugin requests the current Monero price for your currency from `https://api.coingecko.com`. No store or customer data is sent (only the currency code). You can avoid it entirely by pricing your store in XMR, using a fixed rate, or a fixed exchange rate. CoinGecko terms: https://www.coingecko.com/en/terms · privacy: https://www.coingecko.com/en/privacy
 
 3. **Your own xmr-pay agent**, *only* in the optional "Agent" mode, the plugin talks over HTTP to the agent daemon **you** run (on your own machine). It is your software; nothing leaves your control.
 
@@ -115,13 +118,13 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 
 = 1.1.2 =
 * **Hardening (Agent mode):** Agent URLs are now enforced as localhost-only in the setup wizard, gateway settings, Blocks availability, and runtime client, closing an avoidable server-side request surface before WordPress.org review.
-* **Fix (remote node setup):** WordPress's `wp_safe_remote_*` only allows a short list of ports and silently blocks Monero RPC ports like 18081 (mainnet) / 38089 (stagenet), so pointing the plugin at a remote node failed until you hand-added an `http_allowed_safe_ports` filter. The plugin now whitelists the ports of YOUR configured node(s) automatically (and only those — the safe-HTTP SSRF guard still protects every other host/port). Thanks to the tester who reported this. No settings change.
+* **Fix (remote node setup):** WordPress's `wp_safe_remote_*` only allows a short list of ports and silently blocks Monero RPC ports like 18081 (mainnet) / 38089 (stagenet), so pointing the plugin at a remote node failed until you hand-added an `http_allowed_safe_ports` filter. The plugin now whitelists the ports of YOUR configured node(s) automatically (and only those: the safe-HTTP SSRF guard still protects every other host/port). Thanks to the tester who reported this. No settings change.
 
 = 1.1.1 =
 * **Fix (payment detection):** the per-output scan loop wrapped ownership AND amount/commitment decoding in one catch, so an error while decoding an output that IS yours (e.g. a pruned node, a malformed blob) was indistinguishable from "not yours" and could report a real payment as unpaid. Ownership and decoding are now separated: an undecodable but owned output fails closed and is surfaced (found-but-unverified), never silently missed. Hardening only; no settings or data change.
 
 = 1.1.0 =
-* **Non-custodial refunds (claim-link).** Refund an order and the buyer gets a link to enter a Monero receive address (a tx never reveals the sender); you pay it by hand and mark it sent. Configurable link expiry with one-click reissue, address + network validation, and a reopen on a later refund so additional money is never stranded. Something BTCPay's Monero plugin cannot do.
+* **Non-custodial refunds (claim-link).** Refund an order and the buyer gets a link to enter a Monero receive address (a tx never reveals the sender); you pay it by hand and mark it sent. Configurable link expiry with one-click reissue, address + network validation, and a reopen on a later refund so additional money is never stranded.
 * **Monero payments report + CSV export** under WooCommerce (owed / received / overpaid / confirmations / state / refund status), spreadsheet-formula-injection safe.
 * **Resilient multi-node.** Comma-separated nodes now genuinely fail over, and the block height is cross-checked across them (the lowest is used), so a lagging node can only delay a payment, never confirm it early.
 * **Critical fix:** the order-completion and proof paths used a non-existent WordPress function for their lock; replaced with a real atomic mutex. Also: a watch order is no longer created in an unscannable state when the node is briefly unreachable (the checkout fails cleanly so the buyer retries), a wrong-network refund address is rejected, and a mempool double-spend is never credited.
@@ -135,7 +138,7 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 = 1.0.0 =
 * **First stable release.** The no-server (pure-PHP) and agent modes are both production-tested with an adversarial test suite (order-independence, dedup, byzantine duplicates, false-paid hunting).
 * **No-server mode now sums multiple payments.** A buyer who pays in installments, or sends a small test transaction then the rest, now completes automatically once the total reaches the price, matching the agent mode. Previously the WP-native scanner tracked only the first transaction.
-* **Funds are never stranded.** A watch-mode order that received a partial payment is flagged and kept open (never auto-cancelled at expiry) and completes on a top-up.
+* **Detected partial payments stay open.** A watch-mode order that received a partial payment is flagged and kept open (never auto-cancelled at expiry) and completes on a top-up.
 * Hardened the settlement math to be independent of the order the node returns transactions in, so a duplicate or out-of-order response can never over- or under-credit an order.
 
 = 0.1.8 (beta) =
@@ -156,7 +159,7 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 
 = 0.1.5 (beta) =
 * Pairs with the **xmr-pay 0.4.0-beta** agent (payment-correctness + reliability release). No store reconfiguration needed.
-* **Funds are never orphaned on expiry.** A partially-paid order is no longer auto-cancelled when its window lapses, the plugin asks the agent, keeps it on hold, and shows a "your funds are safe, contact us" message with the QR hidden.
+* **Preserve detected partial payments at expiry.** A partially-paid order is no longer auto-cancelled when its window lapses, the plugin asks the agent, keeps it on hold, and shows a "your funds are safe, contact us" message with the QR hidden.
 * **Overpayment is surfaced.** When a buyer overpays, the exact excess is recorded on the order (meta + note) and shown in the admin payment meta box.
 * **Reconcile safety net.** A 5-minute cron re-polls the agent for on-hold orders and completes (or flags) any the webhook missed, covers webhook outages and node catch-up.
 * **Sync-status on the checkout.** When the agent's node is catching up, the payment page shows "node catching up…" instead of a silent "unpaid".

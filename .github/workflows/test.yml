@@ -1,5 +1,5 @@
 # Runs the standalone PHP test suite on every push/PR. These tests need no WordPress or
-# WooCommerce — they exercise the pure money/protocol logic (the PHP mirror of the xmr-pay
+# WooCommerce: they exercise the pure money/protocol logic (the PHP mirror of the xmr-pay
 # library) directly. The scanner suite is excluded here because it talks to a live Monero node.
 name: test
 

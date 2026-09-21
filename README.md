@@ -1,107 +1,41 @@
 # xmr-pay for WooCommerce
 
-> **Support Monero, support this:** donations are welcome and never required. They keep xmr-pay independent (no ads, no investors, no upsell).
-> `45sEohkyWYxAfHy8ekP7B34Bd3qhgrupcQfUQAHvfUWkfgqJhCA4QYLigrBg8G8TE4WggtMGpmjXrbmvepkWLec58KKLkm9`
+Accept Monero in WooCommerce. Payments go directly to the merchant's wallet.
+Native modes verify transactions in WordPress using a private view key; agent
+mode connects WordPress to a local XMRPay agent. No mode holds a spend key.
 
-Accept Monero (XMR) in your WooCommerce store. Funds go straight to your own wallet
-(non-custodial), and there is no backend for you to run: WordPress verifies payments
-itself, in plain PHP, against a Monero node. No third party, no account, no fee from
-us.
+Requires PHP 7.4+, WordPress 6.2+ and WooCommerce 7.0+. Native verification needs
+GMP and BCMath. The plugin supports classic checkout, Blocks and HPOS.
 
-> Requires PHP 7.4+ (with the GMP and BCMath extensions for the no-server modes), WordPress 6.2+,
-> WooCommerce 7.0+. HPOS-compatible. MIT licensed.
+The plugin directory is `nodewatch-monero`; its display name is
+**Nodewatch Monero Payments for WooCommerce**. It is part of the XMRPay project.
 
-> **AKA `Nodewatch Monero Payments for WooCommerce` on WordPress.org.** WP.org guidelines
-> don't allow a plugin name starting with "XMR", so the directory listing uses a distinct name.
-> Same plugin, same code, same author, not affiliated with the Monero project or Automattic.
+## Payment modes
 
-[![release](https://img.shields.io/github/v/release/SlowBearDigger/xmr-pay-woocommerce?color=blue&label=version)](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest)
-[![tests](https://img.shields.io/github/actions/workflow/status/SlowBearDigger/xmr-pay-woocommerce/test.yml?branch=main&label=tests)](https://github.com/SlowBearDigger/xmr-pay-woocommerce/actions/workflows/test.yml)
-[![server: not required](https://img.shields.io/badge/server-not%20required-brightgreen)](#no-server-it-runs-inside-wordpress)
-[![funds: non-custodial](https://img.shields.io/badge/funds-non--custodial-brightgreen)](#)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-
-**Quick links:** [Download .zip](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest/download/xmr-pay-for-woocommerce.zip) · [Live demo (stagenet)](https://demo.xmrpay.shop) · [xmr-pay library](https://github.com/SlowBearDigger/xmr-pay) · [Changelog](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases)
-
-## See it live (stagenet, no real money)
-
-> [live.xmrpay.shop](https://live.xmrpay.shop) : configure the plugin yourself and watch it verify a payment
-> [demo.xmrpay.shop](https://demo.xmrpay.shop) : a full demo store, pay with free test XMR
-> [Download the latest .zip](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases/latest/download/xmr-pay-for-woocommerce.zip)
-
-## Built on the xmr-pay library
-
-This plugin is a standalone install (drop it in, paste your address, done). Under the
-hood it runs on the [xmr-pay library](https://github.com/SlowBearDigger/xmr-pay), the
-same engine published on npm. The two projects are independent and each links the
-other: this README is about the plugin, that one is about the engine underneath.
-
-## How it compares (WooCommerce Monero options)
-
-The other ways to take Monero in WooCommerce are honest, non-custodial projects too. The
-difference is what you have to keep running, and whether anything sits in the verify path.
-
-| | **xmr-pay for WooCommerce** | monerowp (Monero Gateway) | BTCPay Server (WC plugin) |
+| Mode | Buyer action | View key stored on | Separate process |
 |---|---|---|---|
-| Setup | Install plugin, paste your address | Install plugin + run monero-wallet-rpc | Stand up a BTCPay server, then connect WooCommerce |
-| Always-on server / daemon? | **No**, pure PHP inside WordPress | Yes, wallet-rpc on your server | Yes, a full BTCPay server |
-| Verify path | Your node, in pure PHP (no third party) | wallet-rpc, or a public block explorer | Your BTCPay + wallet-rpc |
-| Custody | Non-custodial, view key only | View-only recommended (or hot wallet) | Non-custodial (self-run) |
-| Monero refunds | **Built-in, non-custodial (claim-link)** | Not built-in | Manual (collect a return address) |
-| Dependencies | GMP + BCMath (standard PHP) | wallet-rpc + BCMath | Docker + full stack |
-| Maturity & adoption | New (2026) | Long-standing, but maintenance has slowed | Most mature, multi-coin, battle-tested |
+| Auto-detect (`watch`) | pays the order subaddress | WordPress | none |
+| "I've paid" (`proof`) | submits a transaction ID | WordPress | none |
+| Agent | pays the order subaddress | local agent | Node agent |
 
-> **Where the others are stronger:** BTCPay Server does far more than accept Monero
-> (multi-coin, point-of-sale, Lightning, accounting) and has years in production; monerowp
-> is the long-standing community plugin many stores already run. xmr-pay for WooCommerce is
-> the newest. Its bet is narrow on purpose: nothing extra to run, payment verified in pure
-> PHP against a node you choose, and non-custodial Monero refunds built in, which neither
-> of the others offers.
+Native proof mode uses the merchant's view key. It does not accept a keyless
+transaction proof through an external verifier. The plugin bundles a
+WordPress-specific PHP scanner; it does not execute the npm library in PHP.
 
-## No server. It runs inside WordPress.
+The server checks payment evidence before completing an order. Browser status
+and widget events do not authorize fulfillment. Native scanning requires every
+configured node to respond and agree; adding a node can reduce availability if
+that node fails. The agent's node selection is failover, not quorum.
 
-Most Monero plugins make you run something extra. This one does not. There are three
-ways to confirm a payment, and the two recommended ones run entirely inside
-WordPress, in pure PHP:
-
-| Mode | Buyer does | View key on your server? | Separate process? |
-|---|---|---|---|
-| **Auto-detect** (recommended) | nothing, just pays | yes | no |
-| **"I've paid"** | pastes the transaction ID | yes | no |
-| **Agent** (advanced) | nothing | no (the agent holds it) | yes (`npx xmr-pay`) |
-
-The two no-server modes do the Monero crypto in pure PHP (vendored and audited: no
-Composer, no Node, no `monero-wallet-rpc`). The only outside thing they need is a
-Monero node to read the chain, and a public one is fine. Your view key never leaves
-your server. Agent mode is for merchants who would rather run the separate
-[xmr-pay daemon](https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/AGENT.md).
-
-```
-Auto-detect / "I've paid" (no server):     Agent (advanced):
-  checkout > order to your address          checkout > POST /order > agent (Node + view key)
-  buyer pays > monerod                       buyer pays > monerod
-  WordPress verifies in PHP > paid           agent > signed webhook > plugin > paid
-```
-
-**Why it is reasonably trustworthy** (and where the limits honestly are):
-
-> **It can see, it cannot spend.** WordPress only ever holds your *view* key. It reads
-> incoming payments; it can never move your money. The spend key is never asked for.
-> **The amount is proven, not claimed.** Monero commits the real amount on-chain and
-> the plugin checks that commitment, so a forged amount is rejected.
-> **It fails closed.** The amount commitment, enough confirmations, no time-lock, and
-> no double-count must all pass, or the order stays unpaid. It never guesses "paid".
-> **The honest caveat:** it trusts the node you point it at. A public node is fine for
-> most stores; for serious money run your own node or require two nodes to agree.
-
-The buyer's browser only ever shows status. Fulfillment happens server-side, so a
-faked "paid" in the browser fools nothing.
+[Release downloads](https://github.com/SlowBearDigger/xmr-pay-woocommerce/releases)
+· [JavaScript library](https://github.com/SlowBearDigger/xmr-pay)
+· [Data and footprint](nodewatch-monero/docs/DATA-AND-FOOTPRINT.md)
 
 ## Quick start
 
-1. Install and activate the plugin (drop `xmr-pay-for-woocommerce/` in
+1. Install and activate the plugin (drop `nodewatch-monero/` in
    `wp-content/plugins/`, or upload the zip). A guided setup wizard helps on first run.
-2. Go to **WooCommerce > Settings > Payments > Monero (xmr-pay)**.
+2. Go to **WooCommerce > Settings > Payments > Monero (Nodewatch)**.
 3. Pick a **mode** (Auto-detect is recommended).
 4. For the no-server modes, fill in:
    > **Your Monero address.**
@@ -118,14 +52,13 @@ faked "paid" in the browser fools nothing.
 
 ## Settings
 
-Address, view key, node(s), confirmations, an optional underpayment tolerance, and a
-checkout theme. That is it. The "Agent settings" section applies only to Agent mode;
+Configure the address, view key, nodes, confirmations, pricing, tolerance and
+checkout presentation. Automatic expiry is optional and defaults to disabled. The "Agent settings" section applies only to Agent mode;
 leave it blank otherwise.
 
 Each node has its own authentication setting: **None** for an open RPC endpoint,
 **Basic** for HTTP Basic authentication, or **Digest** for HTTP Digest authentication.
-Enter the username and password in that node's row; credentials are never reused for
-another node during failover. Digest requires PHP's cURL extension. Keep RPC behind
+Enter the username and password in that node's row; credentials are scoped to that node. Digest requires PHP's cURL extension. Keep RPC behind
 HTTPS or a private network because Basic credentials are only encoded, not encrypted.
 
 For example, an Umbrel node reachable on your private network could be entered as
@@ -136,13 +69,13 @@ the same password across nodes.
 
 ## What it stores and what it touches
 
-No custom database tables. Settings live in one option row, per-order data in order
-meta, short-lived caches in transients, and two idempotent WP-Cron jobs. Outbound: a
-Monero node (plus CoinGecko only if you price in fiat). The plugin also drops the
+No custom database tables. Settings live in an option row, per-order data in order
+meta, with auxiliary options, caches and scheduled jobs. Outbound connections
+include configured Monero nodes, CoinGecko when selected, and the local agent in agent mode. The plugin also drops the
 buyer's IP and browser from Monero orders (there are no chargebacks to dispute).
-Full map: [`docs/DATA-AND-FOOTPRINT.md`](xmr-pay-for-woocommerce/docs/DATA-AND-FOOTPRINT.md).
+Full map: [`docs/DATA-AND-FOOTPRINT.md`](nodewatch-monero/docs/DATA-AND-FOOTPRINT.md).
 
-## The truths (please read before taking real money)
+## Operational limits
 
 > **Monero is irreversible and the sender is hidden, so there are no automatic
 > refunds.** To refund a buyer you send them XMR back by hand.
@@ -155,16 +88,28 @@ Full map: [`docs/DATA-AND-FOOTPRINT.md`](xmr-pay-for-woocommerce/docs/DATA-AND-F
 > **A brand-new transaction can take a moment on a public node.** With "I've paid", a
 > transaction still in the mempool may not be served by a public node yet; the check
 > says "try again", never a false "paid", and clears once it is in a block. Your own
-> node removes the wait.
+> node gives you control over availability, but does not guarantee immediate detection.
 > **You need both the GMP and BCMath PHP extensions** for the no-server modes. Enable
 > them in the PHP runtime that actually executes WordPress, not only in the Monero-node
 > container or the host's command-line PHP. In a container setup, install/enable
 > `ext-gmp` and `ext-bcmath` in the WordPress/PHP image, then restart that container.
 
+## Expiry and migration
+
+Automatic expiry defaults to `0` (disabled). Detected partial, pending and locked
+payments stay open. PHP watch mode scans blocks and can miss transfers still in
+the mempool; native proof mode needs a submitted transaction ID. Enabling expiry
+therefore requires a process for reconciling late or unseen payments.
+
+Agent mode requires `AGENT_TOKEN` even on loopback. Configure the same token in
+WordPress and keep the agent URL local. Existing agent installations must apply
+the [dependency guidance](https://github.com/SlowBearDigger/xmr-pay/blob/main/SECURITY.md#dependencies).
+After upgrading, test payment and callback handling on staging before mainnet.
+
 ## Docs
 
 > FAQ and guide (plain-language and technical): [xmr-pay/docs/FAQ.md](https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/FAQ.md)
-> Data and footprint: [`docs/DATA-AND-FOOTPRINT.md`](xmr-pay-for-woocommerce/docs/DATA-AND-FOOTPRINT.md)
+> Data and footprint: [`docs/DATA-AND-FOOTPRINT.md`](nodewatch-monero/docs/DATA-AND-FOOTPRINT.md)
 > How WordPress-native verification works: [`docs/WP-NATIVE-VERIFICATION.md`](docs/WP-NATIVE-VERIFICATION.md)
 > Agent mode: [xmr-pay/docs/AGENT.md](https://github.com/SlowBearDigger/xmr-pay/blob/main/docs/AGENT.md)
 
@@ -180,9 +125,9 @@ Needs Node and PHP (`wp-now` uses SQLite, no MySQL). Boot WordPress + WooCommerc
 this plugin via the included blueprint:
 
 ```bash
-cd xmr-pay-for-woocommerce
+cd nodewatch-monero
 npx @wp-now/wp-now start --blueprint=../blueprint.json --port=8881
-# http://localhost:8881  (auto-login; a test product; gateway preconfigured)
+# http://localhost:8881  (auto-login; configure the gateway and create a test product before checkout)
 ```
 
 Then set a no-server mode with a stagenet address + view key + a stagenet node, place
@@ -201,26 +146,25 @@ php tests/scanner.test.php       # on-chain verification vs a public stagenet no
 
 ## Status
 
-**1.0.** Classic and Blocks (Store API) checkout, the three modes above, per-order
+Classic and Blocks (Store API) checkout, the three modes above, per-order
 subaddresses, QR via the bundled `<xmr-pay>` widget, signed receipts, HPOS-compatible,
 and a guided setup wizard. The no-server mode sums installment and top-up payments and
-never strands partial funds, with the settlement math hardened to be independent of
+preserves detected partial funds, with the settlement math hardened to be independent of
 the order a node returns transactions in (covered by the aggregation test suite).
 
 ## Acknowledgements
 
-Built on the [xmr-pay library](https://github.com/SlowBearDigger/xmr-pay) (the npm
-core), and the open-source work it stands on. Give them a star:
+Shares amount and state contracts with the [xmr-pay library](https://github.com/SlowBearDigger/xmr-pay) and uses these open-source components:
 
-> [monero-integrations / monerophp](https://github.com/monero-integrations/monerophp) (MIT): the pure-PHP ed25519, key-derivation and base58 primitives the WordPress-native verifier is vendored on. The breakthrough that made "verify in PHP" possible.
+> [monero-integrations / monerophp](https://github.com/monero-integrations/monerophp) (MIT): the pure-PHP ed25519, key-derivation and base58 primitives the WordPress-native verifier is vendored on. Used by the native scanner.
 > [kornrunner/php-keccak](https://github.com/kornrunner/php-keccak) (MIT): Keccak-256 with Monero's padding, in pure PHP.
 > [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT): the bundled `<xmr-pay>` widget's self-contained QR encoder.
 > [monero-ts](https://github.com/woodser/monero-ts) (woodser, MIT): the WASM reference the PHP verifier is cross-checked against.
-> Inspiration: [BTCPay Server](https://btcpayserver.org/)'s Monero plugin and [MoneroPay](https://gitlab.com/moneropay/moneropay), studied to match (and, on reorg-safety and arithmetic, exceed) their detection model.
+> Inspiration: [BTCPay Server](https://btcpayserver.org/)'s Monero plugin and [MoneroPay](https://gitlab.com/moneropay/moneropay), related open-source payment projects.
 
 ## License
 
 MIT. A [GoXMR](https://goxmr.click) project.
 
-> **Support Monero, support this:** donations are welcome and never required. They keep xmr-pay independent (no ads, no investors, no upsell).
+Donations support maintenance:
 > `45sEohkyWYxAfHy8ekP7B34Bd3qhgrupcQfUQAHvfUWkfgqJhCA4QYLigrBg8G8TE4WggtMGpmjXrbmvepkWLec58KKLkm9`
