@@ -11,11 +11,11 @@
   "steps": [
     {
       "step": "activatePlugin",
-      "pluginPath": "xmr-pay-for-woocommerce/xmr-pay-for-woocommerce.php"
+      "pluginPath": "nodewatch-monero/nodewatch-monero.php"
     },
     {
       "step": "runPHP",
-      "code": "<?php require_once('/wordpress/wp-load.php'); update_option('woocommerce_xmrpay_settings', array('enabled'=>'yes','title'=>'Monero (XMR)','description'=>'Pay privately with Monero. Scan the QR — your wallet fills in the exact amount.','agent_url'=>'http://127.0.0.1:8788','agent_token'=>'','webhook_secret'=>'whsec_test_xmrpay','min_confirmations'=>'1','price_source'=>'coingecko','test_amount'=>'0.01')); echo 'CONFIG_OK';"
+      "code": "<?php require_once('/wordpress/wp-load.php'); update_option('woocommerce_xmrpay_settings', array('enabled'=>'yes','title'=>'Monero (XMR)','description'=>'Pay with Monero. Scan the QR to fill in the address and amount.','agent_url'=>'http://127.0.0.1:8788','agent_token'=>'','webhook_secret'=>'whsec_test_xmrpay','min_confirmations'=>'1','price_source'=>'coingecko','test_amount'=>'0.01')); echo 'CONFIG_OK';"
     },
     {
       "step": "runPHP",

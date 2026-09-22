@@ -2,8 +2,8 @@
   "$schema": "https://playground.wordpress.net/blueprint-schema.json",
   "meta": {
     "author": "SlowBearDigger",
-    "title": "xmr-pay for WooCommerce — sandbox (stagenet)",
-    "description": "Try the admin: install, run the setup wizard, explore the gateway settings. Runs entirely in your browser. NOTE: live on-chain detection needs a real host (the browser sandbox has no GMP and can't reach a Monero node) — see demo.xmrpay.shop for a live stagenet checkout."
+    "title": "xmr-pay for WooCommerce: sandbox (stagenet)",
+    "description": "Try the admin: install, run the setup wizard, explore the gateway settings. Runs entirely in your browser. NOTE: live on-chain detection needs a real host (the browser sandbox has no GMP and can't reach a Monero node): see demo.xmrpay.shop for a live stagenet checkout."
   },
   "landingPage": "/wp-admin/admin.php?page=xmrpay-setup",
   "preferredVersions": { "php": "8.2", "wp": "latest" },
@@ -34,7 +34,7 @@
     },
     {
       "step": "runPHP",
-      "code": "<?php require_once('/wordpress/wp-load.php'); update_option('woocommerce_xmrpay_settings', array('enabled'=>'yes','mode'=>'watch','title'=>'Monero (XMR)','description'=>'Pay privately with Monero. Scan the QR — your wallet fills in the exact amount.','xmr_address'=>'59iRx5JkUsgFg93DWCDsDUBHj8HFnuYLjPPRDapzgfuSYLeb36GKJVHdJ6XAP5K2QJC7TqVdpsthr6JfyMtaSP6bGBPVRCb','view_key'=>'','nodes'=>'http://node.monerodevs.org:38089','proof_min_conf'=>'1','price_source'=>'fixed','fixed_rate'=>'150')); echo 'CONFIG_OK';"
+      "code": "<?php require_once('/wordpress/wp-load.php'); update_option('woocommerce_xmrpay_settings', array('enabled'=>'yes','mode'=>'watch','title'=>'Monero (XMR)','description'=>'Pay with Monero. Scan the QR to fill in the address and amount.','xmr_address'=>'59iRx5JkUsgFg93DWCDsDUBHj8HFnuYLjPPRDapzgfuSYLeb36GKJVHdJ6XAP5K2QJC7TqVdpsthr6JfyMtaSP6bGBPVRCb','view_key'=>'','nodes'=>'http://node.monerodevs.org:38089','proof_min_conf'=>'1','price_source'=>'fixed','fixed_rate'=>'150')); echo 'CONFIG_OK';"
     },
     {
       "step": "runPHP",

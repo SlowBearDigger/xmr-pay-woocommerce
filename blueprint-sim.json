@@ -11,7 +11,7 @@
   "steps": [
     {
       "step": "activatePlugin",
-      "pluginPath": "xmr-pay-for-woocommerce/xmr-pay-for-woocommerce.php"
+      "pluginPath": "nodewatch-monero/nodewatch-monero.php"
     },
     {
       "step": "runPHP",
