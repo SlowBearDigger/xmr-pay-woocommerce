@@ -28,7 +28,7 @@ class XmrPay_Setup {
 
 		add_submenu_page(
 			'woocommerce',
-			__( 'Monero payments — Setup', 'nodewatch-monero' ),
+			__( 'Monero payments: Setup', 'nodewatch-monero' ),
 			__( 'Monero setup', 'nodewatch-monero' ),
 			'manage_woocommerce',
 			self::PAGE,
@@ -90,7 +90,7 @@ class XmrPay_Setup {
 			return;
 		}
 		$url = admin_url( 'admin.php?page=' . self::PAGE );
-		echo '<div class="notice notice-info is-dismissible"><p><strong>' . esc_html__( 'Monero payments', 'nodewatch-monero' ) . '</strong> — ' .
+		echo '<div class="notice notice-info is-dismissible"><p><strong>' . esc_html__( 'Monero payments', 'nodewatch-monero' ) . '</strong>: ' .
 			esc_html__( 'finish setup to start accepting XMR.', 'nodewatch-monero' ) .
 			' <a href="' . esc_url( $url ) . '" class="button button-primary" style="margin-left:6px">' . esc_html__( 'Run the setup wizard', 'nodewatch-monero' ) . '</a></p></div>';
 	}
@@ -145,7 +145,7 @@ class XmrPay_Setup {
 		}
 
 		if ( empty( $cfg['description'] ) ) {
-			$cfg['description'] = __( 'Pay privately with Monero. Scan the QR — your wallet fills in the exact amount.', 'nodewatch-monero' );
+			$cfg['description'] = __( 'Pay with Monero. Scan the QR to fill in the address and amount.', 'nodewatch-monero' );
 		}
 
 		update_option( self::OPTION, $cfg );
@@ -178,6 +178,7 @@ class XmrPay_Setup {
 				'enterUrl'      => __( 'enter the Agent URL first', 'nodewatch-monero' ),
 				'reqfail'       => __( 'request failed', 'nodewatch-monero' ),
 				'copied'        => __( 'Copied', 'nodewatch-monero' ),
+				'copyFailed'    => __( 'Copy failed. Select the value manually.', 'nodewatch-monero' ),
 				'saving'        => __( 'Saving…', 'nodewatch-monero' ),
 				'couldNotSave'  => __( 'Could not save. Try again.', 'nodewatch-monero' ),
 				'requestFailed' => __( 'Request failed.', 'nodewatch-monero' ),
@@ -210,8 +211,8 @@ class XmrPay_Setup {
 				<div class="xp-head">
 					<div class="xp-logo">ɱ</div>
 					<div>
-						<h1><?php esc_html_e( 'Accept Monero — setup', 'nodewatch-monero' ); ?></h1>
-						<p class="xp-sub"><?php esc_html_e( 'Non-custodial. Funds go straight to your wallet — no third party, ever.', 'nodewatch-monero' ); ?></p>
+						<h1><?php esc_html_e( 'Accept Monero: setup', 'nodewatch-monero' ); ?></h1>
+						<p class="xp-sub"><?php esc_html_e( 'Funds go directly to your wallet. The plugin cannot spend them.', 'nodewatch-monero' ); ?></p>
 					</div>
 				</div>
 
@@ -224,10 +225,9 @@ class XmrPay_Setup {
 
 				<div class="xp-body">
 
-					<!-- 0 — start + mode -->
 					<section class="xp-step show" data-step="0">
-						<h2><?php esc_html_e( 'Non-custodial Monero — pick how to verify', 'nodewatch-monero' ); ?></h2>
-						<p class="lead"><?php esc_html_e( 'Funds go straight to your own wallet; no third party ever touches them. Choose how payments are confirmed — the two no-server options need nothing running 24/7.', 'nodewatch-monero' ); ?></p>
+						<h2><?php esc_html_e( 'Non-custodial Monero: pick how to verify', 'nodewatch-monero' ); ?></h2>
+						<p class="lead"><?php esc_html_e( 'Funds go straight to your own wallet; no third party ever touches them. Choose how payments are confirmed: the two no-server options need nothing running 24/7.', 'nodewatch-monero' ); ?></p>
 						<label class="xp-radio sel" data-mode="watch">
 							<input type="radio" name="xp-mode" value="watch"<?php checked( $cur_mode, 'watch' ); ?>>
 							<b><?php esc_html_e( 'Auto-detect in WordPress (recommended)', 'nodewatch-monero' ); ?></b>
@@ -236,7 +236,7 @@ class XmrPay_Setup {
 						<label class="xp-radio" data-mode="proof">
 							<input type="radio" name="xp-mode" value="proof"<?php checked( $cur_mode, 'proof' ); ?>>
 							<b><?php esc_html_e( 'Buyer taps “I’ve paid”', 'nodewatch-monero' ); ?></b>
-							<span><?php esc_html_e( 'The lightest. The buyer pastes their transaction ID and WordPress verifies it — no scanning, no agent.', 'nodewatch-monero' ); ?></span>
+							<span><?php esc_html_e( 'The lightest. The buyer pastes their transaction ID and WordPress verifies it: no scanning, no agent.', 'nodewatch-monero' ); ?></span>
 						</label>
 						<label class="xp-radio" data-mode="agent">
 							<input type="radio" name="xp-mode" value="agent"<?php checked( $cur_mode, 'agent' ); ?>>
@@ -245,22 +245,20 @@ class XmrPay_Setup {
 						</label>
 					</section>
 
-					<!-- 1 — connect (panel swaps with the chosen mode) -->
 					<section class="xp-step" data-step="1">
-						<!-- no-server panel: watch + proof -->
 						<div data-panel="noserver">
 							<h2><?php esc_html_e( 'Your wallet', 'nodewatch-monero' ); ?></h2>
-							<p class="lead"><?php esc_html_e( 'WordPress verifies payments itself with your VIEW key (view-only — it can see payments, never spend). Nothing runs 24/7.', 'nodewatch-monero' ); ?></p>
+							<p class="lead"><?php esc_html_e( 'WordPress verifies payments itself with your VIEW key (view-only: it can see payments, never spend). Nothing runs 24/7.', 'nodewatch-monero' ); ?></p>
 							<div class="xp-field">
-								<label for="xp-addr"><?php esc_html_e( 'Your Monero address', 'nodewatch-monero' ); ?> <span class="hint"><?php esc_html_e( 'sets the network — 4… = mainnet, 5… = stagenet', 'nodewatch-monero' ); ?></span></label>
+								<label for="xp-addr"><?php esc_html_e( 'Your Monero address', 'nodewatch-monero' ); ?> <span class="hint"><?php esc_html_e( 'sets the network: 4… = mainnet, 5… = stagenet', 'nodewatch-monero' ); ?></span></label>
 								<input type="text" id="xp-addr" class="xp-mono" placeholder="4… (mainnet) / 5… (stagenet)" value="<?php echo esc_attr( $g( 'xmr_address' ) ); ?>">
 							</div>
 							<div class="xp-field">
-								<label for="xp-view"><?php esc_html_e( 'Private view key', 'nodewatch-monero' ); ?> <span class="hint"><?php esc_html_e( 'view-only — never your spend key or seed', 'nodewatch-monero' ); ?></span></label>
+								<label for="xp-view"><?php esc_html_e( 'Private view key', 'nodewatch-monero' ); ?> <span class="hint"><?php esc_html_e( 'view-only: never your spend key or seed', 'nodewatch-monero' ); ?></span></label>
 								<?php if ( $has_const ) : ?>
 									<div class="xp-note ok"><?php
 										/* translators: %s: the XMRPAY_VIEW_KEY constant name */
-										printf( esc_html__( 'Loaded from the %s constant in wp-config.php — nothing to enter here.', 'nodewatch-monero' ), '<code>XMRPAY_VIEW_KEY</code>' );
+										printf( esc_html__( 'Loaded from the %s constant in wp-config.php: nothing to enter here.', 'nodewatch-monero' ), '<code>XMRPAY_VIEW_KEY</code>' );
 									?></div>
 								<?php else : ?>
 									<input type="password" id="xp-view" class="xp-mono" placeholder="<?php esc_attr_e( '64 hex characters', 'nodewatch-monero' ); ?>" value="<?php echo esc_attr( $g( 'view_key' ) ); ?>">
@@ -283,12 +281,11 @@ class XmrPay_Setup {
 							<span class="hint" style="margin-left:8px"><?php esc_html_e( 'checks the node, network, and that your view key matches the address', 'nodewatch-monero' ); ?></span>
 							<div id="xp-node-result" style="margin-top:10px"></div>
 						</div>
-						<!-- agent panel -->
 						<div data-panel="agent" style="display:none">
 							<h2><?php esc_html_e( 'Connect your agent', 'nodewatch-monero' ); ?></h2>
 							<p class="lead"><?php esc_html_e( 'Run npx xmr-pay on a machine you control; it prints an Agent URL, a token, and a webhook secret. Paste them here.', 'nodewatch-monero' ); ?></p>
 							<div class="xp-field">
-								<label for="xp-agent-url"><?php esc_html_e( 'Agent URL', 'nodewatch-monero' ); ?> <span class="hint"><?php esc_html_e( 'localhost only — 127.0.0.1 or ::1', 'nodewatch-monero' ); ?></span></label>
+								<label for="xp-agent-url"><?php esc_html_e( 'Agent URL', 'nodewatch-monero' ); ?> <span class="hint"><?php esc_html_e( 'localhost only: 127.0.0.1 or ::1', 'nodewatch-monero' ); ?></span></label>
 								<input type="url" id="xp-agent-url" placeholder="http://127.0.0.1:8788" value="<?php echo esc_attr( $g( 'agent_url' ) ); ?>">
 							</div>
 							<div class="xp-field">
@@ -308,11 +305,10 @@ class XmrPay_Setup {
 						</div>
 					</section>
 
-					<!-- 2 — pricing -->
 					<section class="xp-step" data-step="2">
 						<h2><?php esc_html_e( 'How prices become XMR', 'nodewatch-monero' ); ?></h2>
 						<?php if ( $is_xmr_store ) : ?>
-							<div class="xp-note ok"><?php esc_html_e( 'Your store currency is already XMR — prices are native Monero and no price feed is used. Nothing to choose here.', 'nodewatch-monero' ); ?></div>
+							<div class="xp-note ok"><?php esc_html_e( 'Your store currency is already XMR: prices are native Monero and no price feed is used. Nothing to choose here.', 'nodewatch-monero' ); ?></div>
 						<?php else : ?>
 							<p class="lead"><?php
 								printf(
@@ -325,7 +321,7 @@ class XmrPay_Setup {
 							?></p>
 							<label class="xp-radio sel" data-src="coingecko">
 								<input type="radio" name="xp-price" value="coingecko" checked>
-								<b><?php esc_html_e( 'CoinGecko — live rate', 'nodewatch-monero' ); ?></b>
+								<b><?php esc_html_e( 'CoinGecko: live rate', 'nodewatch-monero' ); ?></b>
 								<span><?php esc_html_e( 'Convert the fiat total to XMR at the current market price. Recommended for most stores.', 'nodewatch-monero' ); ?></span>
 								<div class="xp-cond" data-cond="coingecko">
 									<input type="text" id="xp-cg-key" class="xp-mono" placeholder="<?php esc_attr_e( 'CoinGecko API key (optional)', 'nodewatch-monero' ); ?>" value="<?php echo esc_attr( $g( 'coingecko_api_key' ) ); ?>">
@@ -333,7 +329,7 @@ class XmrPay_Setup {
 							</label>
 							<label class="xp-radio" data-src="fixed">
 								<input type="radio" name="xp-price" value="fixed">
-								<b><?php esc_html_e( 'Fixed rate — you set it', 'nodewatch-monero' ); ?></b>
+								<b><?php esc_html_e( 'Fixed rate: you set it', 'nodewatch-monero' ); ?></b>
 								<span><?php esc_html_e( 'Pin the price of 1 XMR in your store currency. No external feed.', 'nodewatch-monero' ); ?></span>
 								<div class="xp-cond" data-cond="fixed">
 									<input type="text" id="xp-fixed" placeholder="<?php esc_attr_e( 'price of 1 XMR, e.g. 150', 'nodewatch-monero' ); ?>" value="<?php echo esc_attr( $g( 'fixed_rate' ) ); ?>">
@@ -342,7 +338,6 @@ class XmrPay_Setup {
 						<?php endif; ?>
 					</section>
 
-					<!-- 3 — go live -->
 					<section class="xp-step" data-step="3">
 						<h2><?php esc_html_e( 'How it looks at checkout', 'nodewatch-monero' ); ?></h2>
 						<p class="lead"><?php esc_html_e( 'Last bit. Name the method and match the payment box to your store theme. You can fine-tune everything later in the full settings.', 'nodewatch-monero' ); ?></p>
@@ -360,7 +355,6 @@ class XmrPay_Setup {
 						<div class="xp-note info"><?php esc_html_e( 'Clicking “Finish” enables Monero at checkout with everything you set here.', 'nodewatch-monero' ); ?></div>
 					</section>
 
-					<!-- done -->
 					<section class="xp-step" data-step="done">
 						<div class="xp-done">
 							<div class="check">✓</div>
@@ -378,13 +372,12 @@ class XmrPay_Setup {
 				<div class="xp-foot" id="xp-foot">
 					<button type="button" class="xp-btn link" id="xp-back" style="visibility:hidden"><?php esc_html_e( '← Back', 'nodewatch-monero' ); ?></button>
 					<div class="right">
-						<a class="xp-btn link" href="<?php echo esc_url( $full_url ); ?>"><?php esc_html_e( 'Skip — I\'ll use the full settings', 'nodewatch-monero' ); ?></a>
+						<a class="xp-btn link" href="<?php echo esc_url( $full_url ); ?>"><?php esc_html_e( 'Skip: I\'ll use the full settings', 'nodewatch-monero' ); ?></a>
 						<button type="button" class="xp-btn primary" id="xp-next"><?php esc_html_e( 'Next →', 'nodewatch-monero' ); ?></button>
 					</div>
 				</div>
 			</div>
 
-			<?php  ?>
 		</div>
 		<?php
 	}

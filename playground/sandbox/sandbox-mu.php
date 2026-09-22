@@ -69,7 +69,7 @@ add_action( 'wp_footer', function () {
 	$wizard   = admin_url( 'admin.php?page=xmrpay-setup' );
 	$settings = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=xmrpay' );
 	$shop     = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'shop' ) : home_url( '/' );
-	echo '<div id="xmrpay-sb"><span>xmr-pay LIVE SANDBOX — a real WordPress on stagenet. Configure the plugin; the server is locked.</span>'
+	echo '<div id="xmrpay-sb"><span>xmr-pay LIVE SANDBOX: a real WordPress on stagenet. Configure the plugin; the server is locked.</span>'
 		. '<a href="' . esc_url( $wizard ) . '">Setup wizard</a>'
 		. '<a href="' . esc_url( $settings ) . '">Gateway settings</a>'
 		. '<a href="' . esc_url( $shop ) . '">Storefront</a>'

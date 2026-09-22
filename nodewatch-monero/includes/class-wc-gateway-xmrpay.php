@@ -10,7 +10,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 	public function __construct() {
 		$this->id                 = 'xmrpay';
 		$this->method_title       = __( 'Monero (Nodewatch)', 'nodewatch-monero' );
-		$this->method_description = __( 'Accept Monero, non-custodial. Funds go straight to your address. WordPress verifies payments itself in PHP (no server) — or point it at your own agent daemon at scale.', 'nodewatch-monero' );
+		$this->method_description = __( 'Accept Monero, non-custodial. Funds go straight to your address. WordPress verifies payments itself in PHP (no server): or point it at your own agent daemon at scale.', 'nodewatch-monero' );
 		$this->has_fields         = false;
 		$this->icon               = apply_filters( 'woocommerce_xmrpay_icon', plugins_url( 'assets/monero-symbol.png', XMRPAY_WC_FILE ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- xmrpay is the plugin's internal prefix
 
@@ -112,7 +112,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'description' => array(
 				'title'   => __( 'Description', 'nodewatch-monero' ),
 				'type'    => 'textarea',
-				'default' => __( 'Pay privately with Monero. Scan the QR — your wallet fills in the exact amount.', 'nodewatch-monero' ),
+				'default' => __( 'Pay with Monero. Scan the QR to fill in the address and amount.', 'nodewatch-monero' ),
 			),
 			'checkout_theme' => array(
 				'title'   => __( 'Payment box theme', 'nodewatch-monero' ),
@@ -129,7 +129,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'type'        => 'text',
 				'default'     => '',
 				'placeholder' => 'https://example.com/thank-you',
-				'description' => __( 'Optional. When the payment confirms, send the buyer here (a custom thank-you, a digital-download page, etc.) instead of staying on the order-received page. {order_id} and {order_key} are substituted — {order_key} only for a URL on this same site, so the order token is never leaked to a third-party domain. Leave empty for the default WooCommerce behaviour.', 'nodewatch-monero' ),
+				'description' => __( 'Optional. When the payment confirms, send the buyer here (a custom thank-you, a digital-download page, etc.) instead of staying on the order-received page. {order_id} and {order_key} are substituted: {order_key} only for a URL on this same site, so the order token is never leaked to a third-party domain. Leave empty for the default WooCommerce behaviour.', 'nodewatch-monero' ),
 			),
 			'refund_link_days' => array(
 				'title'             => __( 'Refund link valid for (days)', 'nodewatch-monero' ),
@@ -143,16 +143,16 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'type'    => 'select',
 				'default' => 'watch',
 				'options' => array(
-					'watch' => __( 'Auto-detect in WordPress — no server (recommended)', 'nodewatch-monero' ),
-					'proof' => __( 'Buyer taps “I’ve paid” — no server', 'nodewatch-monero' ),
+					'watch' => __( 'Auto-detect in WordPress: no server (recommended)', 'nodewatch-monero' ),
+					'proof' => __( 'Buyer taps “I’ve paid”: no server', 'nodewatch-monero' ),
 					'agent' => __( 'Auto-detect via your xmr-pay agent (advanced)', 'nodewatch-monero' ),
 				),
-				'description' => __( 'All three are non-custodial (funds go straight to your address). <strong>Auto-detect in WordPress</strong> needs no backend: WordPress scans the chain itself (with your view key, against a public node) and completes the order — no buyer action, nothing to run 24/7. <strong>Buyer taps “I’ve paid”</strong> is the lightest: the buyer submits the transaction ID and WordPress verifies it (no scanning). <strong>Agent</strong> uses the separate xmr-pay daemon you run. The “No-server settings” below (address, view key, nodes) apply to the two no-server options; the “Agent settings” apply only to Agent mode.', 'nodewatch-monero' ),
+				'description' => __( 'All three are non-custodial (funds go straight to your address). <strong>Auto-detect in WordPress</strong> needs no backend: WordPress scans the chain itself (with your view key, against a public node) and completes the order: no buyer action, nothing to run 24/7. <strong>Buyer taps “I’ve paid”</strong> is the lightest: the buyer submits the transaction ID and WordPress verifies it (no scanning). <strong>Agent</strong> uses the separate xmr-pay daemon you run. The “No-server settings” below (address, view key, nodes) apply to the two no-server options; the “Agent settings” apply only to Agent mode.', 'nodewatch-monero' ),
 			),
 			'proof_section' => array(
 				'title' => __( 'No-server settings (Auto-detect & “I’ve paid”)', 'nodewatch-monero' ),
 				'type'  => 'title',
-				'description' => __( 'Used by both no-server modes — “Auto-detect in WordPress” and “Buyer taps I’ve paid”. Your private view key stays on your own server (we never hold a spend key — funds go straight to your address). WordPress fetches transactions from a public node and verifies them itself.', 'nodewatch-monero' ),
+				'description' => __( 'Used by both no-server modes: “Auto-detect in WordPress” and “Buyer taps I’ve paid”. Your private view key stays on your own server (we never hold a spend key: funds go straight to your address). WordPress fetches transactions from a public node and verifies them itself.', 'nodewatch-monero' ),
 			),
 			'network_status' => array(
 				'title' => __( 'Network', 'nodewatch-monero' ),
@@ -162,12 +162,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'title'       => __( 'Your Monero address', 'nodewatch-monero' ),
 				'type'        => 'text',
 				'placeholder' => '4... (mainnet) or 5.../7... (stagenet)',
-				'description' => __( '<strong>The network is set by this address</strong> — a 4… address is mainnet, 5…/7… is stagenet. To go from stagenet to mainnet (or back), change this address plus the view key and node to that network’s. Buyers pay here; each order gets a unique amount so payments can’t be confused.', 'nodewatch-monero' ),
+				'description' => __( '<strong>The network is set by this address</strong>: a 4… address is mainnet, 5…/7… is stagenet. To go from stagenet to mainnet (or back), change this address plus the view key and node to that network’s. Buyers pay here; each order gets a unique amount so payments can’t be confused.', 'nodewatch-monero' ),
 			),
 			'view_key' => array(
 				'title'       => __( 'Private view key', 'nodewatch-monero' ),
 				'type'        => 'password',
-				'description' => __( 'Your wallet’s PRIVATE VIEW key (not the spend key). View-only: it can see incoming payments but cannot spend. <strong>More private:</strong> instead of storing it here, put <code>define(\'XMRPAY_VIEW_KEY\', \'…\');</code> in wp-config.php — then it stays out of the database, this screen, and backups. A value here is used only if the constant is not set.', 'nodewatch-monero' ),
+				'description' => __( 'Your wallet’s PRIVATE VIEW key (not the spend key). View-only: it can see incoming payments but cannot spend. <strong>More private:</strong> instead of storing it here, put <code>define(\'XMRPAY_VIEW_KEY\', \'…\');</code> in wp-config.php: then it stays out of the database, this screen, and backups. A value here is used only if the constant is not set.', 'nodewatch-monero' ),
 			),
 			'nodes' => array(
 				'title'       => __( 'Monero node(s)', 'nodewatch-monero' ),
@@ -195,7 +195,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'agent_section' => array(
 				'title' => __( 'Agent settings (advanced)', 'nodewatch-monero' ),
 				'type'  => 'title',
-				'description' => __( 'Used only when the “Agent” mode is selected. The separate xmr-pay daemon you run (see docs/AGENT.md) holds your view key and does the scanning — this plugin only talks HTTP to it. Detection policy (confirmations, tolerance, expiry) is set ON the agent (XMR_MIN_CONFIRMATIONS, XMR_TOLERANCE_XMR, XMR_EXPIRY_HOURS). Leave blank if you use a no-server mode.', 'nodewatch-monero' ),
+				'description' => __( 'Used only when the “Agent” mode is selected. The separate xmr-pay daemon you run (see docs/AGENT.md) holds your view key and does the scanning: this plugin only talks HTTP to it. Detection policy (confirmations, tolerance, expiry) is set ON the agent (XMR_MIN_CONFIRMATIONS, XMR_TOLERANCE_XMR, XMR_EXPIRY_HOURS). Leave blank if you use a no-server mode.', 'nodewatch-monero' ),
 			),
 			'agent_url' => array(
 				'title'       => __( 'Agent URL', 'nodewatch-monero' ),
@@ -224,7 +224,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'pricing_section' => array(
 				'title' => __( 'Pricing', 'nodewatch-monero' ),
 				'type'  => 'title',
-				'description' => __( 'How the cart total becomes an XMR amount. Tip: set your store currency to <strong>XMR</strong> to price natively in Monero — then no price feed is used.', 'nodewatch-monero' ),
+				'description' => __( 'How the cart total becomes an XMR amount. Tip: set your store currency to <strong>XMR</strong> to price natively in Monero: then no price feed is used.', 'nodewatch-monero' ),
 			),
 			'price_source' => array(
 				'title'   => __( 'Price source', 'nodewatch-monero' ),
@@ -235,12 +235,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 					'custom'    => __( 'Your own price source (a URL)', 'nodewatch-monero' ),
 					'fixed'     => __( 'Fixed rate (set it yourself)', 'nodewatch-monero' ),
 				),
-				'description' => __( 'How a fiat total converts to XMR (ignored when the store currency is already XMR). For CoinGecko or a custom source, set a <strong>Fixed rate</strong> too and it’s used automatically as a fallback if the live feed is ever unavailable — so checkout never hard-fails.', 'nodewatch-monero' ),
+				'description' => __( 'How a fiat total converts to XMR (ignored when the store currency is already XMR). For CoinGecko or a custom source, set a <strong>Fixed rate</strong> too and it’s used automatically as a fallback if the live feed is ever unavailable. Checkout requires an available live rate or a valid fixed rate.', 'nodewatch-monero' ),
 			),
 			'coingecko_api_key' => array(
 				'title'       => __( 'CoinGecko API key', 'nodewatch-monero' ),
 				'type'        => 'password',
-				'description' => __( 'Optional — your own CoinGecko Demo/Pro key, so the price feed is yours and not rate-limited. Leave empty to use the free public endpoint.', 'nodewatch-monero' ),
+				'description' => __( 'Optional: your own CoinGecko Demo/Pro key, so the price feed is yours and not rate-limited. Leave empty to use the free public endpoint.', 'nodewatch-monero' ),
 			),
 			'custom_rate_url' => array(
 				'title'       => __( 'Custom price URL', 'nodewatch-monero' ),
@@ -270,13 +270,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'title'       => __( 'Test amount (XMR)', 'nodewatch-monero' ),
 				'type'        => 'text',
 				'placeholder' => '',
-				'description' => __( 'TEST ONLY — charges this exact XMR amount, ignoring the cart total. It is honoured ONLY when your agent is on stagenet/testnet (run "Test connection" first); on mainnet it is ignored, so it can never fix the price on a live store. Leave empty in production.', 'nodewatch-monero' ),
+				'description' => __( 'TEST ONLY: charges this exact XMR amount, ignoring the cart total. It is honoured ONLY when your agent is on stagenet/testnet (run "Test connection" first); on mainnet it is ignored, so it can never fix the price on a live store. Leave empty in production.', 'nodewatch-monero' ),
 			),
 			'expiry_hours' => array(
 				'title'       => __( 'Auto-cancel after (hours)', 'nodewatch-monero' ),
 				'type'        => 'number',
 				'default'     => '0',
-				'description' => __( 'Cancel an unpaid order this many hours after it was placed (frees reserved stock). 0 = never. Payments after cancellation require manual reconciliation. WordPress scanning may not detect a transfer that is still awaiting mining when the order expires. Leave this at 0 to keep waiting. This window doubles as your rate-drift guard: if you price in fiat, an order paid much later settles at the XMR amount locked at checkout, so set this to how long you are willing to honour that rate (e.g. 12–24). If you price natively in XMR, the amount owed never changes — leave it at 0.', 'nodewatch-monero' ),
+				'description' => __( 'Cancel an unpaid order this many hours after it was placed (frees reserved stock). 0 = never. Payments after cancellation require manual reconciliation. WordPress scanning may not detect a transfer that is still awaiting mining when the order expires. Leave this at 0 to keep waiting. This window doubles as your rate-drift guard: if you price in fiat, an order paid much later settles at the XMR amount locked at checkout, so set this to how long you are willing to honour that rate (e.g. 12–24). If you price natively in XMR, the amount owed never changes: leave it at 0.', 'nodewatch-monero' ),
 				'custom_attributes' => array( 'min' => '0', 'step' => '1' ),
 			),
 			'debug_log' => array(
@@ -310,7 +310,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			if ( 'watch' === $mode ) {
 
 				if ( false === $this->scan_order( $order ) ) {
-					$this->log( 'expiry deferred for watch order #' . $oid . ' — scan incomplete' );
+					$this->log( 'expiry deferred for watch order #' . $oid . ': scan incomplete' );
 					continue;
 				}
 				$order = wc_get_order( $oid );
@@ -346,7 +346,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 					$order->update_meta_data( '_xmrpay_received', (string) $r['receivedXmr'] );
 					$order->add_order_note( sprintf(
 						/* translators: 1: received XMR, 2: owed XMR */
-						__( 'Partial Monero payment received (%1$s of %2$s XMR) but the order passed its expiry window — NOT auto-cancelled. The funds are in your wallet; await the buyer\'s top-up or refund manually.', 'nodewatch-monero' ),
+						__( 'Partial Monero payment received (%1$s of %2$s XMR) but the order passed its expiry window: NOT auto-cancelled. The funds are in your wallet; await the buyer\'s top-up or refund manually.', 'nodewatch-monero' ),
 						(string) $r['receivedXmr'], (string) $order->get_meta( '_xmrpay_amount' )
 					) );
 					$order->save();
@@ -387,7 +387,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			if ( is_wp_error( $r ) || ! filter_var( $r['paid'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
 				continue;
 			}
-			$this->log( 'reconcile cron: agent reports #' . $oid . ' paid — completing' );
+			$this->log( 'reconcile cron: agent reports #' . $oid . ' paid: completing' );
 			$this->mark_paid( $order, $r );
 		}
 	}
@@ -519,7 +519,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			<th scope="row" class="titledesc"><?php echo esc_html( $data['title'] ); ?></th>
 			<td class="forminp">
 				<span style="display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#fff;background:<?php echo esc_attr( $color ); ?>;padding:5px 13px;border-radius:4px"><?php echo esc_html( $saved ? $net : 'not set' ); ?></span>
-				<p class="description"><?php esc_html_e( 'Detected automatically from your address below — a 4… address is mainnet, 5…/7… is stagenet. To switch networks (e.g. go live from stagenet to mainnet), just enter that network’s address, view key and node. There is no separate toggle — the address decides.', 'nodewatch-monero' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Detected automatically from your address below: a 4… address is mainnet, 5…/7… is stagenet. To switch networks (e.g. go live from stagenet to mainnet), just enter that network’s address, view key and node. There is no separate toggle: the address decides.', 'nodewatch-monero' ); ?></p>
 			</td>
 		</tr>
 		<?php
@@ -534,7 +534,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				<button type="button" class="button" id="xmrpay-test-node"><?php esc_html_e( 'Check setup', 'nodewatch-monero' ); ?></button>
 				<div id="xmrpay-node-result" style="margin-top:10px"></div>
 				<p class="description"><?php esc_html_e( 'Checks the node is reachable, the network matches your address, and your view key belongs to the address (uses the values above, even unsaved).', 'nodewatch-monero' ); ?></p>
-				<?php  ?>
 			</td>
 		</tr>
 		<?php
@@ -550,7 +549,6 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				<button type="button" class="button" id="xmrpay-test-agent"><?php esc_html_e( 'Test connection', 'nodewatch-monero' ); ?></button>
 				<span id="xmrpay-test-result" style="margin-left:10px;font-weight:600"></span>
 				<p class="description"><?php esc_html_e( 'Pings your agent (the URL/token above, even unsaved) and reports network + view-only status.', 'nodewatch-monero' ); ?></p>
-				<?php  ?>
 			</td>
 		</tr>
 		<?php
@@ -600,8 +598,8 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 		$rows = array(
 			__( 'Owed', 'nodewatch-monero' )          => $order->get_meta( '_xmrpay_amount' ) . ' XMR',
-			__( 'Received', 'nodewatch-monero' )       => ( $order->get_meta( '_xmrpay_received' ) ?: '—' ) . ' XMR',
-			__( 'Confirmations', 'nodewatch-monero' )  => $order->get_meta( '_xmrpay_confirmations' ) ?: '—',
+			__( 'Received', 'nodewatch-monero' )       => ( $order->get_meta( '_xmrpay_received' ) ?: '-' ) . ' XMR',
+			__( 'Confirmations', 'nodewatch-monero' )  => $order->get_meta( '_xmrpay_confirmations' ) ?: '-',
 		);
 		echo '<div class="xmrpay-order-detail" style="clear:both;margin-top:12px"><h4 style="margin:0 0 6px">' . esc_html__( 'Monero payment', 'nodewatch-monero' ) . '</h4><p style="margin:0 0 4px"><strong>' . esc_html__( 'Address', 'nodewatch-monero' ) . ':</strong><br><code style="font-size:11px;word-break:break-all">' . esc_html( $addr ) . '</code></p>';
 		foreach ( $rows as $label => $val ) {
@@ -612,7 +610,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			echo '<p style="margin:4px 0 0"><strong>tx:</strong><br><code style="font-size:11px;word-break:break-all">' . esc_html( $txids ) . '</code></p>';
 		}
 		if ( $order->get_meta( '_xmrpay_overpaid' ) === 'yes' ) {
-			echo '<p style="margin:6px 0 0;padding:6px 8px;background:#fffbeb;border:1px solid #f59e0b;border-radius:4px;color:#92400e"><strong>' . esc_html__( 'Overpaid', 'nodewatch-monero' ) . ':</strong> ' . esc_html( (string) $order->get_meta( '_xmrpay_overpaid_xmr' ) ) . ' XMR — ' . esc_html__( 'refund the difference to the buyer.', 'nodewatch-monero' ) . '</p>';
+			echo '<p style="margin:6px 0 0;padding:6px 8px;background:#fffbeb;border:1px solid #f59e0b;border-radius:4px;color:#92400e"><strong>' . esc_html__( 'Overpaid', 'nodewatch-monero' ) . ':</strong> ' . esc_html( (string) $order->get_meta( '_xmrpay_overpaid_xmr' ) ) . ' XMR: ' . esc_html__( 'refund the difference to the buyer.', 'nodewatch-monero' ) . '</p>';
 		}
 		$this->admin_refund_box( $order );
 		echo '</div>';
@@ -630,7 +628,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			$window = (int) $order->get_meta( '_xmrpay_refund_window' );
 			$exp    = XmrPay_Util::claim_expires_at( $opened, $window );
 			if ( XmrPay_Util::claim_expired( 'requested', $opened, $window, time() ) ) {
-				echo '<p style="margin:4px 0 0;color:#b91c1c"><strong>' . esc_html__( 'Claim-link expired', 'nodewatch-monero' ) . '</strong> — '
+				echo '<p style="margin:4px 0 0;color:#b91c1c"><strong>' . esc_html__( 'Claim-link expired', 'nodewatch-monero' ) . '</strong>: '
 					/* translators: %s: expiry date/time */
 					. esc_html( sprintf( __( 'expired %s. The buyer cannot use it until you reissue it.', 'nodewatch-monero' ), $this->fmt_dt( $exp ) ) ) . '</p>';
 				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin:6px 0 0">';
@@ -717,7 +715,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			wp_send_json_error( array( 'msg' => __( 'not allowed', 'nodewatch-monero' ) ) );
 		}
 		if ( ! XmrPay_Util::crypto_ready() ) {
-			wp_send_json_error( array( 'msg' => __( 'PHP is missing the GMP or BCMath extension — ask your host to enable ext-gmp and ext-bcmath (or use Agent mode).', 'nodewatch-monero' ) ) );
+			wp_send_json_error( array( 'msg' => __( 'PHP is missing the GMP or BCMath extension: ask your host to enable ext-gmp and ext-bcmath (or use Agent mode).', 'nodewatch-monero' ) ) );
 		}
 		$address = isset( $_POST['address'] ) ? sanitize_text_field( wp_unslash( $_POST['address'] ) ) : '';
 		$raw_nodes = isset( $_POST['node_configs'] ) ? json_decode( wp_unslash( $_POST['node_configs'] ), true ) : array();
@@ -799,12 +797,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			$valid = $keys && ! empty( $keys['address_valid'] );
 			$ok    = $ok && $valid;
 			/* translators: %s: network name */
-			$checks[] = array( 'ok' => $valid, 'msg' => $valid ? sprintf( __( 'Address is valid (%s).', 'nodewatch-monero' ), $addr_net ) : __( 'Address could not be decoded — check it.', 'nodewatch-monero' ) );
+			$checks[] = array( 'ok' => $valid, 'msg' => $valid ? sprintf( __( 'Address is valid (%s).', 'nodewatch-monero' ), $addr_net ) : __( 'Address could not be decoded: check it.', 'nodewatch-monero' ) );
 		}
 		if ( '' !== $address && '' !== $view ) {
 			$match = $keys && ! empty( $keys['key_match'] );
 			$ok    = $ok && $match;
-			$checks[] = array( 'ok' => $match, 'msg' => $match ? __( 'View key belongs to this address.', 'nodewatch-monero' ) : __( 'View key does NOT match this address — detection would find nothing. Re-check the key.', 'nodewatch-monero' ) );
+			$checks[] = array( 'ok' => $match, 'msg' => $match ? __( 'View key belongs to this address.', 'nodewatch-monero' ) : __( 'View key does NOT match this address: detection would find nothing. Re-check the key.', 'nodewatch-monero' ) );
 		} elseif ( '' === $view ) {
 			$ok = false;
 			$checks[] = array( 'ok' => false, 'msg' => __( 'No view key set yet.', 'nodewatch-monero' ) );
@@ -922,13 +920,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			$live_val = (float) $live;
 
 			if ( $fixed > 0 && ( $live_val < $fixed * 0.02 || $live_val > $fixed * 50 ) ) {
-				$this->log( 'live rate (' . $live_val . ') is implausible vs fixed fallback (' . $fixed . ') — discarding', 'warning' );
+				$this->log( 'live rate (' . $live_val . ') is implausible vs fixed fallback (' . $fixed . '): discarding', 'warning' );
 			} else {
 				return $live_val;
 			}
 		}
 		if ( $fixed > 0 ) {
-			$this->log( 'price feed (' . $source . ') unavailable — using the fixed-rate fallback ' . $fixed, 'warning' );
+			$this->log( 'price feed (' . $source . ') unavailable: using the fixed-rate fallback ' . $fixed, 'warning' );
 			return $fixed;
 		}
 		return is_wp_error( $live ) ? $live : new WP_Error( 'xmrpay_rate', __( 'Could not get an XMR price and no fixed-rate fallback is set.', 'nodewatch-monero' ) );
@@ -1026,7 +1024,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				return array( 'result' => 'failure' );
 			}
 			$order->payment_complete();
-			$order->add_order_note( __( 'Order total is 0 — no Monero payment required.', 'nodewatch-monero' ) );
+			$order->add_order_note( __( 'Order total is 0: no Monero payment required.', 'nodewatch-monero' ) );
 			if ( WC()->cart ) { WC()->cart->empty_cart(); }
 			return array( 'result' => 'success', 'redirect' => $this->get_return_url( $order ) );
 		}
@@ -1047,7 +1045,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 				$birthday = $this->scanner()->tip_height();
 				if ( null === $birthday || (int) $birthday <= 0 ) {
-					$this->log( 'watch checkout #' . $order_id . ' aborted — node unreachable, no tip height', 'error' );
+					$this->log( 'watch checkout #' . $order_id . ' aborted: node unreachable, no tip height', 'error' );
 					wc_add_notice( __( 'Could not reach the Monero network to set up your payment. Please try again in a moment.', 'nodewatch-monero' ), 'error' );
 					return array( 'result' => 'failure' );
 				}
@@ -1076,7 +1074,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( is_wp_error( $created ) ) {
 			$this->log( 'create_order failed for #' . $order_id . ': ' . $created->get_error_message(), 'error' );
 			wc_add_notice( __( 'Could not start the Monero payment. Try again or contact us.', 'nodewatch-monero' ), 'error' );
-			$order->add_order_note( 'xmr-pay: agent create_order failed — ' . $created->get_error_message() );
+			$order->add_order_note( 'xmr-pay: agent create_order failed: ' . $created->get_error_message() );
 			return array( 'result' => 'failure' );
 		}
 		$this->log( 'order #' . $order_id . ' → ' . $amount . ' XMR · ' . ( isset( $created['address'] ) ? $created['address'] : '?' ) );
@@ -1161,7 +1159,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			<h2><?php esc_html_e( 'Pay with Monero', 'nodewatch-monero' ); ?></h2>
 			<?php if ( $terminal ) : ?>
 				<div style="margin:8px 0;padding:11px 13px;border:1px solid #f59e0b;border-radius:6px;color:#92400e;background:#fffbeb;font-size:13px;line-height:1.55">
-					<?php /* translators: %s: order number */ echo esc_html( sprintf( __( 'This order (#%s) has expired. If you already sent a Monero payment, don\'t worry — your funds are safe in our wallet. Please contact us with your order number and we will complete it or refund you.', 'nodewatch-monero' ), $order_id ) ); ?>
+					<?php /* translators: %s: order number */ echo esc_html( sprintf( __( 'This order (#%s) has expired. If you already sent a Monero payment, contact us with your order number so we can reconcile it.', 'nodewatch-monero' ), $order_id ) ); ?>
 				</div>
 			<?php else : ?>
 			<div id="xmrpay-status"<?php echo $proof ? '' : ' data-poll="' . esc_url( $status_url ) . '"'; ?> data-paid="<?php echo $paid ? '1' : '0'; ?>"<?php echo $redirect !== '' ? ' data-redirect="' . esc_url( $redirect ) . '"' : ''; ?>
@@ -1186,11 +1184,10 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 							   style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d1d5db;border-radius:6px;font-family:ui-monospace,Menlo,monospace;font-size:12px" />
 						<button type="button" id="xmrpay-verify-btn"
 								style="margin-top:8px;width:100%;padding:10px;border:0;border-radius:6px;background:#ff6600;color:#fff;font-weight:700;font-size:13px;cursor:pointer">
-							<?php esc_html_e( 'I’ve paid — verify', 'nodewatch-monero' ); ?>
+							<?php esc_html_e( 'I’ve paid: verify', 'nodewatch-monero' ); ?>
 						</button>
 						<div id="xmrpay-proof-msg" style="margin-top:8px;font-size:13px;min-height:1em"></div>
 					</div>
-					<?php  ?>
 				<?php endif; ?>
 			<?php endif; ?>
 			<?php echo wp_kses_post( $receipt_html );  ?>
@@ -1217,7 +1214,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		<div class="xmrpay-receipt" style="margin-top:16px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:8px">
 			<p style="margin:0 0 6px;font-weight:600"><?php esc_html_e( 'Your cryptographic receipt', 'nodewatch-monero' ); ?></p>
 			<p style="margin:0;font-size:12px;color:#6b7280">
-				<?php esc_html_e( 'Signed by the merchant. Download it and verify it yourself — anyone can, forever, with no third party.', 'nodewatch-monero' ); ?>
+				<?php esc_html_e( 'Signed by the merchant. Download the receipt to verify its signature.', 'nodewatch-monero' ); ?>
 				<?php if ( $fp !== '' ) { /* translators: %s: signer fingerprint */ echo ' ' . esc_html( sprintf( __( 'Signer: %s', 'nodewatch-monero' ), $fp ) ); } ?>
 			</p>
 			<a href="<?php echo esc_attr( $download ); ?>" download="receipt-<?php echo esc_attr( $order->get_id() ); ?>.json"
@@ -1315,7 +1312,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			return;
 		}
 		if ( in_array( $order->get_status(), array( 'cancelled', 'failed', 'refunded' ), true ) ) {
-			wp_send_json( array( 'paid' => false, 'terminal' => true, 'message' => __( 'This order can no longer be paid. If you already sent funds, contact us — they are safe.', 'nodewatch-monero' ) ) );
+			wp_send_json( array( 'paid' => false, 'terminal' => true, 'message' => __( 'This order can no longer be paid. If you already sent funds, contact the store to reconcile the payment.', 'nodewatch-monero' ) ) );
 		}
 		if ( ! preg_match( '/^[0-9a-f]{64}$/', $txid ) ) {
 			wp_send_json( array( 'paid' => false, 'message' => __( 'That doesn’t look like a transaction ID.', 'nodewatch-monero' ) ) );
@@ -1329,7 +1326,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 		$txkey = 'tx_' . $txid;
 		if ( ! $this->acquire_lock( $txkey, 30 ) ) {
-			wp_send_json( array( 'paid' => false, 'message' => __( 'That transaction is being processed — try again in a moment.', 'nodewatch-monero' ) ) );
+			wp_send_json( array( 'paid' => false, 'message' => __( 'That transaction is being processed: try again in a moment.', 'nodewatch-monero' ) ) );
 		}
 		if ( $this->txid_used_elsewhere( $txid, $order_id ) ) {
 			$this->release_lock( $txkey );
@@ -1354,13 +1351,13 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( empty( $res['commitment_ok'] ) ) {
 
 			$msg = ( isset( $res['commitment_present'] ) && ! $res['commitment_present'] )
-				? __( 'We could not fully verify this payment — the store’s Monero node may be pruned. Please contact the store.', 'nodewatch-monero' )
+				? __( 'We could not fully verify this payment: the store’s Monero node may be pruned. Please contact the store.', 'nodewatch-monero' )
 				: __( 'That transaction did not verify. Contact the store.', 'nodewatch-monero' );
 			wp_send_json( array( 'paid' => false, 'status' => 'invalid', 'message' => $msg ) );
 		}
 
 		if ( ! empty( $res['in_pool'] ) && ! empty( $res['double_spend_seen'] ) ) {
-			wp_send_json( array( 'paid' => false, 'status' => 'pending', 'message' => __( 'Payment seen but not yet confirmable — waiting for a block. This page will update shortly.', 'nodewatch-monero' ) ) );
+			wp_send_json( array( 'paid' => false, 'status' => 'pending', 'message' => __( 'Payment seen but not yet confirmable: waiting for a block. Verify again after more confirmations.', 'nodewatch-monero' ) ) );
 		}
 
 		$min_conf  = (int) $this->get_option( 'proof_min_conf', '1' );
@@ -1369,12 +1366,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 		$cf        = array_key_exists( 'confirmations', $res ) ? $res['confirmations'] : null;
 		if ( null === $cf && empty( $res['in_pool'] ) ) {
-			wp_send_json( array( 'paid' => false, 'status' => 'pending', 'message' => __( 'Payment seen — waiting for confirmation. This page will update shortly.', 'nodewatch-monero' ) ) );
+			wp_send_json( array( 'paid' => false, 'status' => 'pending', 'message' => __( 'Payment seen: waiting for confirmation. Verify again after more confirmations.', 'nodewatch-monero' ) ) );
 		}
 		$verdict   = XmrPay_Util::classify_payment( $exp_pico, $res['amount_atomic'], $tol_pico, $min_conf, null === $cf ? 0 : (int) $cf, ! empty( $res['in_pool'] ), ! empty( $res['locked'] ) );
 
 		if ( ! $verdict['paid'] ) {
-			$msg = __( 'Payment seen — waiting for confirmation. This page will update shortly.', 'nodewatch-monero' );
+			$msg = __( 'Payment seen: waiting for confirmation. Verify again after more confirmations.', 'nodewatch-monero' );
 			/* translators: %s: amount still owed in XMR */
 			if ( 'underpaid' === $verdict['status'] ) { $msg = sprintf( __( 'The amount is short by %s XMR. Please send the difference.', 'nodewatch-monero' ), XmrPay_Util::pico_to_string( $verdict['shortfall_pico'] ) ); }
 			elseif ( 'locked' === $verdict['status'] ) { $msg = __( 'The payment is time-locked and not spendable yet. Try again later.', 'nodewatch-monero' ); }
@@ -1476,10 +1473,10 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed' ), true ) ) {
 			$order->add_order_note( sprintf(
 				/* translators: %s order status */
-				__( 'Monero payment arrived for a %s order — NOT auto-completed. The funds are in your wallet; reconcile manually.', 'nodewatch-monero' ),
+				__( 'Monero payment arrived for a %s order: NOT auto-completed. The funds are in your wallet; reconcile manually.', 'nodewatch-monero' ),
 				$order->get_status()
 			) );
-			$this->log( 'late payment for ' . $order->get_status() . ' order #' . $order->get_id() . ' — not auto-completed', 'warning' );
+			$this->log( 'late payment for ' . $order->get_status() . ' order #' . $order->get_id() . ': not auto-completed', 'warning' );
 			$this->release_lock( $lock_key );
 			return;
 		}
@@ -1517,7 +1514,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		/* translators: %s: transaction hash(es) */
 		if ( $txids !== '' ) { $note .= ' ' . sprintf( __( 'tx: %s', 'nodewatch-monero' ), $txids ); }
 		/* translators: %s: amount overpaid in XMR */
-		if ( $overpaid ) { $note .= ' ' . sprintf( __( 'OVERPAID by %s XMR — the buyer was asked to contact you; refund the difference manually.', 'nodewatch-monero' ), $overpaid_xmr ); }
+		if ( $overpaid ) { $note .= ' ' . sprintf( __( 'OVERPAID by %s XMR: the buyer was asked to contact you; refund the difference manually.', 'nodewatch-monero' ), $overpaid_xmr ); }
 		$order->add_order_note( $note );
 		$this->log( 'marked paid #' . $order->get_id() . ' · received ' . $received . ' · tx ' . $txids );
 
@@ -1549,7 +1546,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$exp  = XmrPay_Util::claim_expires_at( $now, $window );
 		$note = sprintf(
 			/* translators: 1: refund amount with currency symbol, 2: claim-link URL */
-			__( 'Monero refund recorded (%1$s). It is NOT auto-sent — Monero is non-custodial. Send the buyer this claim-link so they can give you a receive address, then pay it from your wallet and mark it sent:%2$s', 'nodewatch-monero' ),
+			__( 'Monero refund recorded (%1$s). It is NOT auto-sent: Monero is non-custodial. Send the buyer this claim-link so they can give you a receive address, then pay it from your wallet and mark it sent:%2$s', 'nodewatch-monero' ),
 			( null !== $amount && '' !== $amount ) ? wc_price( $amount ) : '',
 			"\n" . $this->refund_claim_url( $order )
 		);
@@ -1635,7 +1632,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$window = (int) $order->get_meta( '_xmrpay_refund_window' );
 		if ( XmrPay_Util::claim_expired( $status, $opened, $window, time() ) ) {
 			$this->refund_page( __( 'Refund link expired', 'nodewatch-monero' ),
-				'<p>' . esc_html__( 'This refund link has expired. Please contact the store and they will send you a fresh one — your refund is safe.', 'nodewatch-monero' ) . '</p>', 410 );
+				'<p>' . esc_html__( 'This refund link has expired. Contact the store for a new link.', 'nodewatch-monero' ) . '</p>', 410 );
 		}
 
 		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : 'GET';
@@ -1713,7 +1710,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			$body .= '<div class="err" id="xmraddr-err" role="alert">' . esc_html( $error ) . '</div>';
 		}
 		$body  .= '<button type="submit">' . esc_html__( 'Submit refund address', 'nodewatch-monero' ) . '</button></form>';
-		$body  .= '<p class="note" id="xmraddr-note">' . esc_html__( 'Double-check the address — Monero payments cannot be reversed.', 'nodewatch-monero' ) . '</p>';
+		$body  .= '<p class="note" id="xmraddr-note">' . esc_html__( 'Double-check the address: Monero payments cannot be reversed.', 'nodewatch-monero' ) . '</p>';
 		$this->refund_page( __( 'Claim your refund', 'nodewatch-monero' ), $body );
 	}
 

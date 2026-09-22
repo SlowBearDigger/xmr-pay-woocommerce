@@ -5,7 +5,7 @@ Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.1.4
+Stable tag: 1.2.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -106,6 +106,12 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 
 == Changelog ==
 
+= 1.2.0 =
+* Require complete evidence and agreement from configured nodes before payment settlement.
+* Preserve detected pending or locked payments during expiry and reject agent callbacks for native-mode orders.
+* Update the checkout widget and correct installation and migration guidance.
+
+
 = 1.1.4 =
 * **Multi-node setup health:** Check setup now probes every configured node (up to 10), reports each unhealthy or wrong-network node as a clear warning, and recommends reviewing or replacing it. A degraded failover set remains usable when at least one matching node is healthy; only zero usable nodes blocks setup.
 * **Clear node UX:** nodes are separate numbered cards with per-node authentication, a live elapsed timer while checking, and green/amber health chips with measured response time. The diagnostic timeout adapts to the node count and remains filterable for advanced deployments.
@@ -183,6 +189,10 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 * First public beta. Gateway (classic + Blocks), HPOS support, XMR-native + CoinGecko/fixed pricing, live on-chain progress + top-up, signed HMAC webhooks, exact piconero math, "Test connection", order payment meta box, debug logging.
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+Native verification requires every configured node to answer and agree. Agent mode requires a local agent token; pair with XMRPay 2.0.0 and follow its migration notes. Test the full checkout on staging before production.
+
 
 = 1.1.4 =
 Adds per-node Basic and Digest authentication, clearer multi-node checks, and honest payment-address copy feedback.

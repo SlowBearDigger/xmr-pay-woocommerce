@@ -128,10 +128,10 @@ class XmrPay_Report {
 			echo '<td>' . esc_html( wc_get_order_status_name( $r['wc_status'] ) ) . '</td>';
 			echo '<td>' . esc_html( $r['owed_xmr'] ) . '</td>';
 			echo '<td>' . esc_html( $r['received_xmr'] ) . '</td>';
-			echo '<td>' . esc_html( '' !== $r['overpaid_xmr'] ? $r['overpaid_xmr'] : '—' ) . '</td>';
-			echo '<td>' . esc_html( '' !== $r['confirmations'] ? $r['confirmations'] : '—' ) . '</td>';
-			echo '<td>' . esc_html( '' !== $r['mode'] ? $r['mode'] : '—' ) . '</td>';
-			echo '<td>' . esc_html( '' !== $r['refund_status'] ? $r['refund_status'] : '—' ) . '</td>';
+			echo '<td>' . esc_html( '' !== $r['overpaid_xmr'] ? $r['overpaid_xmr'] : '-' ) . '</td>';
+			echo '<td>' . esc_html( '' !== $r['confirmations'] ? $r['confirmations'] : '-' ) . '</td>';
+			echo '<td>' . esc_html( '' !== $r['mode'] ? $r['mode'] : '-' ) . '</td>';
+			echo '<td>' . esc_html( '' !== $r['refund_status'] ? $r['refund_status'] : '-' ) . '</td>';
 			echo '</tr>';
 		}
 		echo '</tbody></table>';

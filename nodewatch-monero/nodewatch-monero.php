@@ -3,8 +3,8 @@
 /**
  * Plugin Name:       Nodewatch Monero Payments for WooCommerce
  * Plugin URI:        https://github.com/SlowBearDigger/xmr-pay
- * Description:        Accept Monero (XMR) in WooCommerce — non-custodial, funds go straight to your address. Verifies payments in pure PHP against a Monero node (no backend), or via your own agent daemon. No third party in the payment path.
- * Version:           1.1.4
+ * Description:        Accept Monero (XMR) in WooCommerce: non-custodial, funds go straight to your address. Verifies payments in pure PHP against a Monero node (no backend), or via your own agent daemon. No third party in the payment path.
+ * Version:           1.2.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
@@ -17,7 +17,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'XMRPAY_WC_VERSION', '1.1.4' );
+define( 'XMRPAY_WC_VERSION', '1.2.0' );
 define( 'XMRPAY_WC_FILE', __FILE__ );
 
 require_once __DIR__ . '/includes/class-xmrpay-node-config.php';
@@ -116,10 +116,10 @@ function xmrpay_wc_init() {
 			'confirmed'  => __( 'Confirmed', 'nodewatch-monero' ),
 			'paid'       => __( 'Payment confirmed', 'nodewatch-monero' ),
 			'mWatching'  => __( 'Watching the blockchain for your payment…', 'nodewatch-monero' ),
-			'mMempool'   => __( 'Payment detected — waiting for the first confirmation.', 'nodewatch-monero' ),
-			'mConfirming'=> __( 'Confirming — {c}/{m} confirmations.', 'nodewatch-monero' ),
-			'mPartial'   => __( 'Received {r} XMR — send {s} more (QR updated to the exact amount).', 'nodewatch-monero' ),
-			'mLocked'    => __( 'Funds received — maturing on-chain…', 'nodewatch-monero' ),
+			'mMempool'   => __( 'Payment detected: waiting for the first confirmation.', 'nodewatch-monero' ),
+			'mConfirming'=> __( 'Confirming: {c}/{m} confirmations.', 'nodewatch-monero' ),
+			'mPartial'   => __( 'Received {r} XMR: send {s} more (QR updated to the exact amount).', 'nodewatch-monero' ),
+			'mLocked'    => __( 'Funds received: maturing on-chain…', 'nodewatch-monero' ),
 			'mConnecting'=> __( 'Connecting to the payment scanner…', 'nodewatch-monero' ),
 			'block'      => __( 'Latest block', 'nodewatch-monero' ),
 

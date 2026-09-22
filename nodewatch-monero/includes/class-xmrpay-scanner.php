@@ -149,7 +149,7 @@ class XmrPay_Scanner {
 		$responses = array();
 		if ( count( $this->nodes ) > 1 ) {
 
-			foreach ( $this->nodes as $index => $node ) {
+			foreach ( $this->nodes as $node ) {
 				$responses[] = $this->node_rpc_one( $node, '/get_transactions', $body );
 			}
 		} else {
@@ -251,7 +251,7 @@ class XmrPay_Scanner {
 	private function block_tx_hashes( $height ) {
 		$body = array( 'jsonrpc' => '2.0', 'id' => '0', 'method' => 'get_block', 'params' => array( 'height' => (int) $height ) );
 		$expected = null;
-		foreach ( $this->nodes as $index => $node ) {
+		foreach ( $this->nodes as $node ) {
 			$resp = $this->node_rpc_one( $node, '/json_rpc', $body );
 			$result = $resp['result'] ?? null;
 			if ( ! is_array( $result ) ) { return null; }
@@ -447,7 +447,7 @@ class XmrPay_Scanner {
 		if ( $require_commitment && empty( $m['commitment_ok'] ) ) {
 			$present = ! empty( $m['commitment_present'] );
 			return array( 'found' => true, 'amount_atomic' => $m['amount_atomic'], 'output_index' => $m['output_index'], 'out_key' => isset( $m['out_key'] ) ? $m['out_key'] : '', 'commitment_ok' => false, 'commitment_present' => $present,
-				'reason' => $present ? 'commitment mismatch — decoded amount not committed on-chain' : 'commitment unavailable — the node may be pruned; use a full (non-pruned) node' );
+				'reason' => $present ? 'commitment mismatch: decoded amount not committed on-chain' : 'commitment unavailable: the node may be pruned; use a full (non-pruned) node' );
 		}
 		$bh   = isset( $tx['_block_height'] ) ? $tx['_block_height'] : null;
 		$conf = ( null !== $bh && null !== $tip && $bh > 0 ) ? max( 0, $tip - $bh ) : ( ! empty( $tx['_in_pool'] ) ? 0 : null );
