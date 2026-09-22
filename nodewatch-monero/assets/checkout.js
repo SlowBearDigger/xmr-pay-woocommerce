@@ -74,12 +74,12 @@
 		if (d.paid) { text = '✓ ' + (L.paid || 'Payment confirmed'); msg.style.color = '#15803d'; }
 		else {
 			msg.style.color = '#b45309';
-			if (d.status === 'mempool') text = L.mMempool || 'Payment detected — waiting for the first confirmation.';
-			else if (d.status === 'unconfirmed') text = (L.mConfirming || 'Confirming — {c}/{m} confirmations.').replace('{c}', d.confirmations != null ? d.confirmations : 0).replace('{m}', d.minConfirmations != null ? d.minConfirmations : 1);
-			else if (d.status === 'partial') { text = (L.mPartial || 'Received {r} XMR — send {s} more (QR updated).').replace('{r}', d.receivedXmr != null ? d.receivedXmr : '?').replace('{s}', d.shortfallXmr || '?'); applyTopup(d.shortfallXmr); }
-			else if (d.status === 'locked') text = L.mLocked || 'Funds received — maturing on-chain…';
-			else if (d.reachable === false) text = L.mConnecting || 'Connecting to the payment scanner…';
-			else if (d.syncing) text = L.mSyncing || 'Node catching up to the blockchain — your payment will appear here shortly.';
+			if (d.reachable === false) text = L.mConnecting || 'Connecting to the payment scanner…';
+			else if (d.status === 'mempool') text = L.mMempool || 'Payment detected: waiting for the first confirmation.';
+			else if (d.status === 'unconfirmed') text = (L.mConfirming || 'Confirming: {c}/{m} confirmations.').replace('{c}', d.confirmations != null ? d.confirmations : 0).replace('{m}', d.minConfirmations != null ? d.minConfirmations : 1);
+			else if (d.status === 'partial') { text = (L.mPartial || 'Received {r} XMR: send {s} more (QR updated).').replace('{r}', d.receivedXmr != null ? d.receivedXmr : '?').replace('{s}', d.shortfallXmr || '?'); applyTopup(d.shortfallXmr); }
+			else if (d.status === 'locked') text = L.mLocked || 'Funds received: maturing on-chain…';
+			else if (d.syncing) text = L.mSyncing || 'Node catching up to the blockchain: your payment will appear here shortly.';
 				else text = L.mWatching || 'Watching the blockchain for your payment…';
 		}
 		msg.textContent = text;

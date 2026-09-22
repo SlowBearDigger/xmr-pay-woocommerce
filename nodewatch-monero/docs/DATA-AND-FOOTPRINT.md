@@ -48,6 +48,7 @@ HPOS, in `wc_orders_meta`. Selected keys per order (including scan state, receip
 | `_xmrpay_minor` | watch | the subaddress index (= order id) |
 | `_xmrpay_birthday` | watch | chain height at order time (scan starts here) |
 | `_xmrpay_scan_height` | watch | scan checkpoint (advances as blocks are scanned) |
+| `_xmrpay_watch_status` | watch | last scan status, remaining amount, confirmations and height-query availability for checkout polling; does not authorize settlement |
 | `_xmrpay_watch_txid` | watch | the paying tx once discovered (then tracked by id) |
 | `_xmrpay_proof_txid` | proof | the submitted txid (also the replay-dedup key) |
 | `_xmrpay_received`, `_xmrpay_confirmations`, `_xmrpay_txids` | paid | what landed |
@@ -88,3 +89,5 @@ part of the order's financial record).
 Protect WordPress settings and backups: node credentials and agent secrets are
 stored there. Native modes need no separate worker; agent mode requires its Node
 process to remain running.
+
+Manual WooCommerce refund records store `_xmrpay_claim_recorded` after adding their amount to the pending claim. The pending claim excludes refunds already marked sent; WooCommerce keeps the full refund history. Node availability reflects the latest height query, not completion of every block scan.

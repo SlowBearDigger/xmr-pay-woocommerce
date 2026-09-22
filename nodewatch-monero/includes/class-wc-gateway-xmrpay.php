@@ -407,11 +407,18 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 		$address = (string) $order->get_meta( '_xmrpay_address' );
 		$view    = $this->view_key();
-		if ( $address === '' || $view === '' ) { return false; }
 		$scanner = $this->scanner();
-		$tip     = $scanner->tip_height();
+		$tip     = $address !== '' && $view !== '' ? $scanner->tip_height() : null;
 
-		if ( null === $tip ) { delete_transient( $cd ); return false; }
+		if ( null === $tip ) {
+			$status = $order->get_meta( '_xmrpay_watch_status' );
+			if ( ! is_array( $status ) ) { $status = array( 'status' => 'pending' ); }
+			$status['reachable'] = false;
+			$order->update_meta_data( '_xmrpay_watch_status', $status );
+			$order->save();
+			delete_transient( $cd );
+			return false;
+		}
 
 		$min_conf = (int) $this->get_option( 'proof_min_conf', '1' );
 		$tol_pico = XmrPay_Util::xmr_to_pico( $this->get_option( 'proof_tolerance_xmr', '0' ) );
@@ -474,6 +481,17 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			), true );
 			return true;
 		}
+
+		$order->update_meta_data( '_xmrpay_watch_status', array(
+			'reachable'        => true,
+			'status'           => 'mempool' === $sum['status'] ? 'unconfirmed' : $sum['status'],
+			'shortfallXmr'     => XmrPay_Util::pico_to_string( $sum['shortfall_pico'] ),
+			'receivedXmr'      => XmrPay_Util::pico_to_string( $sum['received_pico'] ),
+			'confirmations'    => (int) $sum['confirmations'],
+			'minConfirmations' => $min_conf,
+			'tipHeight'        => $tip,
+		) );
+		$order->save();
 
 		if ( gmp_cmp( gmp_init( (string) $sum['seen_pico'], 10 ), 0 ) > 0 ) {
 			$order->update_meta_data( '_xmrpay_received', XmrPay_Util::pico_to_string( $sum['received_pico'] ) );
@@ -1240,8 +1258,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			if ( $order->is_paid() ) {
 				wp_send_json( array( 'paid' => true, 'status' => 'paid' ) );
 			}
-			$seen = '' !== (string) $order->get_meta( '_xmrpay_watch_txid' );
-			wp_send_json( array( 'paid' => false, 'status' => $seen ? 'confirming' : 'pending', 'reachable' => true ) );
+			$status = $order->get_meta( '_xmrpay_watch_status' );
+			if ( ! is_array( $status ) ) { $status = array( 'status' => 'pending' ); }
+			wp_send_json( array( 'paid' => false ) + $status + array( 'reachable' => false ) );
 		}
 		if ( 'proof' === (string) $order->get_meta( '_xmrpay_mode' ) ) {
 			wp_send_json( array( 'paid' => false, 'status' => 'pending' ) );
@@ -1577,6 +1596,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			$order->save();
 		} else {
 
+			if ( 'sent' === $status ) { $order->delete_meta_data( '_xmrpay_refund_amount' ); }
 			$order->delete_meta_data( '_xmrpay_refund_address' );
 			$order->delete_meta_data( '_xmrpay_refund_txid' );
 			$order->save();
@@ -1785,11 +1805,15 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		if ( ! $order || $order->get_payment_method() !== $this->id ) {
 			return;
 		}
-		if ( '' !== (string) $order->get_meta( '_xmrpay_refund_status' ) ) {
+		$refund = wc_get_order( $refund_id );
+		if ( ! $refund instanceof WC_Order_Refund || (int) $refund->get_parent_id() !== (int) $order_id
+			|| $refund->get_refunded_payment() || $refund->get_meta( '_xmrpay_claim_recorded' ) ) {
 			return;
 		}
-		$refund = wc_get_order( $refund_id );
-		$this->open_refund_claim( $order, $refund ? $refund->get_amount() : '' );
+		if ( true === $this->process_refund( $order_id, $refund->get_amount() ) ) {
+			$refund->update_meta_data( '_xmrpay_claim_recorded', 'yes' );
+			$refund->save();
+		}
 	}
 
 	public function email_instructions( $order, $sent_to_admin, $plain_text = false ) {

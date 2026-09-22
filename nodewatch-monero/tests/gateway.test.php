@@ -24,7 +24,7 @@ function is_wp_error( $t ) { return $t instanceof WP_Error; }
 function set_transient( $key, $value, $ttl ) { $GLOBALS['TRANSIENTS'][$key] = $value; }
 function delete_transient( $key ) { unset( $GLOBALS['TRANSIENTS'][$key] ); }
 function wp_json_encode( $value ) { return json_encode( $value ); }
-function wp_safe_remote_get( $url, $args ) { return array( 'response' => array( 'code' => 200 ), 'body' => '{"height":100}' ); }
+function wp_safe_remote_get( $url, $args ) { if ( ! empty( $GLOBALS['NODE_OFFLINE'] ) ) { return new WP_Error( 'offline' ); } return array( 'response' => array( 'code' => 200 ), 'body' => '{"height":100}' ); }
 function wp_safe_remote_post( $url, $args ) {
     $height = json_decode( $args['body'], true )['params']['height'];
     $block = $height < 100 ? array( 'result' => array( 'block_header' => array( 'height' => $height, 'num_txes' => 0 ), 'tx_hashes' => array() ) ) : array();
@@ -108,7 +108,7 @@ $o->update_meta_data( '_xmrpay_refund_txid', str_repeat( 'a', 64 ) );
 $r = $gw->process_refund( 101, 5.0, '' );
 ok( 'reopen after sent → back to requested', $o->get_meta( '_xmrpay_refund_status' ) === 'requested' );
 ok( 'reopen after sent → stale payout txid cleared', $o->get_meta( '_xmrpay_refund_txid' ) === '' );
-ok( 'reopen after sent → amount accumulates to 55', (float) $o->get_meta( '_xmrpay_refund_amount' ) === 55.0 );
+ok( 'reopen after sent excludes the previous payout', (float) $o->get_meta( '_xmrpay_refund_amount' ) === 5.0 );
 
 // ---- 5. process_refund on a non-xmrpay order → WP_Error, nothing recorded ----
 $other = new FakeOrder( 202, 'stripe' );
@@ -134,6 +134,7 @@ ok( 'watch order remains open without a fresh scan', $watch->get_status() === 'o
 
 // A signed agent event must not complete orders that require local chain verification.
 $mark_paid = new ReflectionMethod( WC_Gateway_XmrPay::class, 'mark_paid' );
+if ( PHP_VERSION_ID < 80100 ) { $mark_paid->setAccessible( true ); }
 foreach ( array( 'watch', 'proof' ) as $mode ) {
     $order = new FakeOrder( 'watch' === $mode ? 404 : 405 );
     $order->update_meta_data( '_xmrpay_mode', $mode );
@@ -164,6 +165,66 @@ $GLOBALS['TRANSIENTS'] = array();
 $GLOBALS['PENDING_IDS'] = array( 303 );
 $gw->expire_orders();
 ok( 'watch expiry checks the last existing block, not the chain length', $watch->get_status() === 'cancelled' );
+
+function absint( $value ) { return abs( (int) $value ); }
+function sanitize_text_field( $value ) { return (string) $value; }
+function wp_unslash( $value ) { return $value; }
+class JsonResponse extends RuntimeException { public $data; public function __construct( $data ) { $this->data = $data; } }
+function wp_send_json( $data, $code = 200 ) { throw new JsonResponse( $data ); }
+
+ok( 'watch scan saves checkout status', is_array( $watch->get_meta( '_xmrpay_watch_status' ) ) && $watch->get_meta( '_xmrpay_watch_status' )['status'] === 'pending' );
+$watch->status = 'on-hold';
+$watch->update_meta_data( '_xmrpay_watch_status', array( 'status' => 'partial', 'receivedXmr' => '0.007', 'shortfallXmr' => '0.013', 'confirmations' => 2, 'minConfirmations' => 1, 'tipHeight' => 100 ) );
+$GLOBALS['TRANSIENTS']['xmrpay_scancd_1_303'] = 1;
+$_GET = array( 'order_id' => 303, 'key' => $watch->get_order_key() );
+try { $gw->ajax_status(); } catch ( JsonResponse $response ) {
+    $data = $response->data;
+    ok( 'partial status survives scan cooldown', $data['status'] === 'partial' && $data['paid'] === false );
+    ok( 'checkout receives exact remaining amount', ( $data['receivedXmr'] ?? null ) === '0.007' && ( $data['shortfallXmr'] ?? null ) === '0.013' );
+    ok( 'checkout receives confirmation requirement', ( $data['confirmations'] ?? null ) === 2 && ( $data['minConfirmations'] ?? null ) === 1 );
+}
+
+$GLOBALS['TRANSIENTS'] = array();
+$GLOBALS['NODE_OFFLINE'] = true;
+try { $gw->ajax_status(); } catch ( JsonResponse $response ) {
+    ok( 'offline watch reports unreachable', $response->data['reachable'] === false );
+    ok( 'offline watch preserves partial amount', $response->data['receivedXmr'] === '0.007' );
+}
+$GLOBALS['TRANSIENTS']['xmrpay_scancd_1_303'] = 1;
+try { $gw->ajax_status(); } catch ( JsonResponse $response ) {
+    ok( 'cooldown preserves offline status', $response->data['reachable'] === false );
+}
+$GLOBALS['NODE_OFFLINE'] = false;
+$GLOBALS['TRANSIENTS'] = array();
+try { $gw->ajax_status(); } catch ( JsonResponse $response ) {
+    ok( 'recovered watch reports reachable', $response->data['reachable'] === true );
+}
+TestGateway::$opts['view_key'] = '';
+$GLOBALS['TRANSIENTS'] = array();
+try { $gw->ajax_status(); } catch ( JsonResponse $response ) {
+    ok( 'missing watch key reports unavailable', $response->data['reachable'] === false );
+}
+
+class WC_Order_Refund extends FakeOrder {
+    public $amount; public $parent; public $gateway_refunded = false;
+    public function get_parent_id() { return $this->parent; }
+    public function get_amount() { return $this->amount; }
+    public function get_refunded_payment() { return $this->gateway_refunded; }
+}
+$manual = new FakeOrder( 600 );
+$GLOBALS['ORDERS'][600] = $manual;
+foreach ( array( 601 => 25, 602 => 15 ) as $id => $amount ) {
+    $refund = new WC_Order_Refund( $id ); $refund->parent = 600; $refund->amount = $amount;
+    $GLOBALS['ORDERS'][$id] = $refund;
+    $gw->on_refunded( 600, $id );
+}
+ok( 'manual refund events accumulate', (float) $manual->get_meta( '_xmrpay_refund_amount' ) === 40.0 );
+$gw->on_refunded( 600, 602 );
+ok( 'repeated manual refund event counted once', (float) $manual->get_meta( '_xmrpay_refund_amount' ) === 40.0 );
+$refund = new WC_Order_Refund( 603 ); $refund->parent = 600; $refund->amount = 10; $refund->gateway_refunded = true;
+$GLOBALS['ORDERS'][603] = $refund;
+$gw->process_refund( 600, 10 ); $gw->on_refunded( 600, 603 );
+ok( 'gateway refund event does not count twice', (float) $manual->get_meta( '_xmrpay_refund_amount' ) === 50.0 );
 
 echo "\n" . ( $fail ? 'FAILED' : 'ALL GREEN' ) . "  $pass passed, $fail failed\n";
 exit( $fail ? 1 : 0 );
