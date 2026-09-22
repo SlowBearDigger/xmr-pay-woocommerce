@@ -98,9 +98,15 @@
 	document.querySelectorAll('.xp-copy-btn').forEach(function(b){
 		b.addEventListener('click', function(){
 			var el = document.getElementById(b.getAttribute('data-copy'));
-			navigator.clipboard && navigator.clipboard.writeText(el ? el.textContent : '');
-			var o = b.textContent; b.textContent=(T.copied||'Copied');
-			setTimeout(function(){ b.textContent=o; }, 1400);
+			var o = b.textContent;
+			var fail = function(){ b.textContent=(T.copyFailed||'Copy failed. Select the value manually.'); };
+			try {
+				if (!el || !navigator.clipboard || !navigator.clipboard.writeText) { fail(); return; }
+				navigator.clipboard.writeText(el.textContent).then(function(){
+					b.textContent=(T.copied||'Copied');
+					setTimeout(function(){ b.textContent=o; }, 1400);
+				}, fail);
+			} catch { fail(); }
 		});
 	});
 
