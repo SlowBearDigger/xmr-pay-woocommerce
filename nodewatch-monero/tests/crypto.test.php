@@ -122,11 +122,11 @@ $GLOBALS['MOCK_TX_RESPONSES'][ $nodes[0] . '/get_transactions' ] = array( 'txs' 
 ok( 'height disagreement cannot confirm early', null === $multi->fetch_txs( array( $a ) ) );
 unset( $GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/get_transactions' ] );
 ok( 'missing node pauses multi-node verification', null === $multi->fetch_txs( array( $a ) ) );
-$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[0] . '/json_rpc' ] = array( 'result' => array( 'tx_hashes' => array( $a ) ) );
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[0] . '/json_rpc' ] = array( 'result' => array( 'block_header' => array( 'height' => 100, 'hash' => str_repeat( 'b', 64 ), 'prev_hash' => str_repeat( 'c', 64 ) ), 'tx_hashes' => array( $a ) ) );
 $GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/json_rpc' ] = array( 'result' => array( 'tx_hashes' => array() ) );
 $scan = $multi->scan_all( $ADDR, $VIEW, 100, 100, array( 'tip' => 110 ) );
 ok( 'block hash disagreement cannot advance scan', $scan['scanned_to'] === 99 );
-$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/json_rpc' ] = array( 'result' => array( 'tx_hashes' => array( $a ) ) );
+$GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/json_rpc' ] = array( 'result' => array( 'block_header' => array( 'height' => 100, 'hash' => str_repeat( 'b', 64 ), 'prev_hash' => str_repeat( 'c', 64 ) ), 'tx_hashes' => array( $a ) ) );
 $GLOBALS['MOCK_TX_RESPONSES'][ $nodes[0] . '/get_transactions' ] = array( 'txs' => array( $row ) );
 $GLOBALS['MOCK_TX_RESPONSES'][ $nodes[1] . '/get_transactions' ] = array( 'txs' => array( $row ) );
 $scan = $multi->scan_all( $ADDR, $VIEW, 100, 100, array( 'tip' => 110 ) );
@@ -135,7 +135,7 @@ ok( 'matching block and tx advance scan', $scan['scanned_to'] === 100 );
 
 $GLOBALS['MOCK_TX_RESPONSES'] = array();
 $GLOBALS['MOCK_TX_RESPONSES']['http://127.0.0.1:1/json_rpc'] = array('result' => array(
-    'block_header' => array('height' => 100, 'num_txes' => 0),
+    'block_header' => array('height' => 100, 'num_txes' => 0, 'hash' => str_repeat('b', 64), 'prev_hash' => str_repeat('c', 64)),
     'json' => '{"tx_hashes":[]}'
 ));
 $scan = $sc->scan_all($ADDR, $VIEW, 100, 100, array('tip' => 110));

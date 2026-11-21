@@ -118,6 +118,7 @@ function xmrpay_wc_init() {
 			'mWatching'  => __( 'Watching the blockchain for your payment…', 'nodewatch-monero' ),
 			'mMempool'   => __( 'Payment detected: waiting for the first confirmation.', 'nodewatch-monero' ),
 			'mConfirming'=> __( 'Confirming: {c}/{m} confirmations.', 'nodewatch-monero' ),
+			'mFinalizing' => __( 'Payment received. Finalizing your order. Do not send another payment.', 'nodewatch-monero' ),
 			'mPartial'   => __( 'Received {r} XMR: send {s} more (QR updated to the exact amount).', 'nodewatch-monero' ),
 			'mLocked'    => __( 'Funds received: maturing on-chain…', 'nodewatch-monero' ),
 			'mConnecting'=> __( 'Connecting to the payment scanner…', 'nodewatch-monero' ),

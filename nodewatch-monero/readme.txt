@@ -3,7 +3,7 @@ Contributors: slowbeardigger
 Donate link: https://xmrpay.shop
 Tags: monero, xmr, cryptocurrency, payment gateway, woocommerce
 Requires at least: 6.2
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
 Stable tag: 1.2.0
 License: MIT
@@ -110,6 +110,11 @@ Your Monero **private view key** (used by the no-server modes) stays on your own
 * Require complete evidence and agreement from configured nodes before payment settlement.
 * Preserve detected pending or locked payments during expiry and reject agent callbacks for native-mode orders.
 * Update the checkout widget and correct installation and migration guidance.
+* Resume bounded Watch scans from validated chain checkpoints instead of repeating the same overlap.
+* Roll back failed native payment completion and restore missing download permissions without repeating payment events.
+* Hide payment instructions while a fully funded order awaits native fulfillment.
+* Keep the shared widget QR and wallet amount aligned with the remaining balance.
+* Synchronize bundled Base58 validation with the canonical PHP engine.
 
 
 = 1.1.4 =

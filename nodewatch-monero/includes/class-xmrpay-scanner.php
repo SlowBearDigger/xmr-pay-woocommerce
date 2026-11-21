@@ -19,6 +19,8 @@ class XmrPay_Scanner {
 	private $http_timeout;
 	private $network;
 	private $last_node_error;
+	private $last_block_hash;
+	private $last_previous_hash;
 
 	public function __construct( $node, $network = 'mainnet', $http_timeout = 20 ) {
 
@@ -249,6 +251,8 @@ class XmrPay_Scanner {
 	}
 
 	private function block_tx_hashes( $height ) {
+		$this->last_block_hash = null;
+		$this->last_previous_hash = null;
 		$body = array( 'jsonrpc' => '2.0', 'id' => '0', 'method' => 'get_block', 'params' => array( 'height' => (int) $height ) );
 		$expected = null;
 		foreach ( $this->nodes as $node ) {
@@ -260,6 +264,7 @@ class XmrPay_Scanner {
 			$list = $result['tx_hashes'] ?? ( $block['tx_hashes'] ?? null );
 			if ( ! is_array( $list ) ) { return null; }
 			$header = $result['block_header'] ?? array();
+			if ( ! is_array( $header ) ) { return null; }
 			if ( ! empty( $header['orphan_status'] )
 				|| ( isset( $header['height'] ) && $header['height'] !== (int) $height )
 				|| ( isset( $header['num_txes'] ) && $header['num_txes'] !== count( $list ) ) ) { return null; }
@@ -270,9 +275,16 @@ class XmrPay_Scanner {
 			}
 			if ( count( array_unique( $sorted ) ) !== count( $sorted ) ) { return null; }
 			sort( $sorted );
-			$evidence = array( $header['hash'] ?? null, $sorted );
+			$evidence = array( $header['hash'] ?? null, $header['prev_hash'] ?? null, $sorted );
 			if ( null !== $expected && $evidence !== $expected ) { return null; }
 			$expected = $evidence;
+		}
+		if ( isset( $header['height'], $header['hash'], $header['prev_hash'] )
+			&& $header['height'] === (int) $height
+			&& is_string( $header['hash'] ) && preg_match( '/^[0-9a-f]{64}$/D', $header['hash'] )
+			&& is_string( $header['prev_hash'] ) && preg_match( '/^[0-9a-f]{64}$/D', $header['prev_hash'] ) ) {
+			$this->last_block_hash = $header['hash'];
+			$this->last_previous_hash = $header['prev_hash'];
 		}
 		return $sorted;
 	}
@@ -533,10 +545,23 @@ class XmrPay_Scanner {
 		$end        = min( (int) $to_height, $h + $max_blocks - 1 );
 		$last       = $h - 1;
 		$matches    = array();
+		$result = array( 'matches' => array(), 'scanned_to' => $last, 'checkpoint' => null );
+		if ( isset( $opts['checkpoint'] ) ) {
+			$failure = $this->check_checkpoint( $opts, $result );
+			if ( null !== $failure ) { return $failure; }
+			$result['checkpoint'] = $opts['checkpoint'];
+		}
+		$previous = isset( $opts['checkpoint'] ) && $opts['checkpoint']['height'] === $h - 1 ? $opts['checkpoint']['hash'] : null;
+		$acquired = array();
+		// Reserve half the existing budget for final canonical-header validation.
 		for ( ; $h <= $end; $h++ ) {
-			if ( ( microtime( true ) - $start ) > $budget_s ) { break; }
+			if ( ( microtime( true ) - $start ) > $budget_s / 2 ) { break; }
 			$hashes = $this->block_tx_hashes( $h );
-			if ( null === $hashes ) { break; }
+			if ( null === $hashes || null === $this->last_block_hash ) { break; }
+			$block_hash = $this->last_block_hash;
+			if ( null !== $previous && $previous !== $this->last_previous_hash ) { return $this->reorg_result( $opts, $last ); }
+			$previous = $block_hash;
+			$acquired[$h] = $block_hash;
 			$incomplete = false;
 			foreach ( array_chunk( $hashes, 50 ) as $batch ) {
 				$txs = $this->fetch_txs( $batch );
@@ -564,10 +589,46 @@ class XmrPay_Scanner {
 					);
 				}
 			}
-			if ( $incomplete ) { return array( 'matches' => $matches, 'scanned_to' => $last ); }
+			if ( $incomplete ) { break; }
 			$last = $h;
+			$result['checkpoint'] = array( 'height' => $h, 'hash' => $block_hash );
 		}
-		return array( 'matches' => $matches, 'scanned_to' => $last );
+		$result['matches'] = $matches;
+		$result['scanned_to'] = $last;
+		if ( isset( $opts['checkpoint'] ) ) {
+			$failure = $this->check_checkpoint( $opts, $result );
+			if ( null !== $failure ) { return $failure; }
+		}
+		foreach ( $acquired as $height => $hash ) {
+			if ( null === $this->block_tx_hashes( $height ) || null === $this->last_block_hash ) {
+				return array( 'matches' => array(), 'scanned_to' => (int) $from_height - 1, 'checkpoint' => null, 'checkpoint_error' => 'unavailable' );
+			}
+			if ( $this->last_block_hash !== $hash ) { return $this->reorg_result( $opts, $last ); }
+		}
+		return $result;
+	}
+
+	private function check_checkpoint( $opts, $result ) {
+		$checkpoint = $opts['checkpoint'];
+		if ( ! is_array( $checkpoint ) || ! is_int( $checkpoint['height'] ?? null ) || $checkpoint['height'] < 0
+			|| ! is_string( $checkpoint['hash'] ?? null ) || ! preg_match( '/^[0-9a-f]{64}$/D', $checkpoint['hash'] ) ) {
+			$result['matches'] = array();
+			$result['checkpoint_error'] = 'invalid';
+			return $result;
+		}
+		if ( ( isset( $opts['tip'] ) && $checkpoint['height'] >= $opts['tip'] )
+			|| null === $this->block_tx_hashes( $checkpoint['height'] ) || null === $this->last_block_hash ) {
+			$result['matches'] = array();
+			$result['checkpoint_error'] = 'unavailable';
+			return $result;
+		}
+		if ( $checkpoint['hash'] !== $this->last_block_hash ) { return $this->reorg_result( $opts, $checkpoint['height'] ); }
+		return null;
+	}
+
+	private function reorg_result( $opts, $last ) {
+		$restore = $opts['restore_height'] ?? ( $last + 1 );
+		return array( 'matches' => array(), 'scanned_to' => $restore - 1, 'checkpoint' => null, 'reorg_detected' => true );
 	}
 
 	private function outpk_mask( $outpk, $i ) {

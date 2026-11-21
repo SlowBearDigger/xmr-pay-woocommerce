@@ -1381,3 +1381,7 @@ msgstr ""
 #: nodewatch-monero.php
 msgid "SlowBearDigger"
 msgstr ""
+
+#: includes/class-wc-gateway-xmrpay.php
+msgid "Payment received. Finalizing your order. Do not send another payment."
+msgstr ""

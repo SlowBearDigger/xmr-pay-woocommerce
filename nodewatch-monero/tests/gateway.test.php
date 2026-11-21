@@ -24,12 +24,24 @@ function is_wp_error( $t ) { return $t instanceof WP_Error; }
 function set_transient( $key, $value, $ttl ) { $GLOBALS['TRANSIENTS'][$key] = $value; }
 function delete_transient( $key ) { unset( $GLOBALS['TRANSIENTS'][$key] ); }
 function wp_json_encode( $value ) { return json_encode( $value ); }
-function wp_safe_remote_get( $url, $args ) { if ( ! empty( $GLOBALS['NODE_OFFLINE'] ) ) { return new WP_Error( 'offline' ); } return array( 'response' => array( 'code' => 200 ), 'body' => '{"height":100}' ); }
+function wp_safe_remote_get( $url, $args ) { if ( ! empty( $GLOBALS['NODE_OFFLINE'] ) ) { return new WP_Error( 'offline' ); } return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( array( 'height' => $GLOBALS['SCAN_TIP'] ?? 100 ) ) ); }
 function wp_safe_remote_post( $url, $args ) {
     $height = json_decode( $args['body'], true )['params']['height'];
-    $block = $height < 100 ? array( 'result' => array( 'block_header' => array( 'height' => $height, 'num_txes' => 0 ), 'tx_hashes' => array() ) ) : array();
+    if ( isset( $GLOBALS['SCAN_TIP'] ) ) {
+        if ( $height >= $GLOBALS['SCAN_TIP'] || $height === ( $GLOBALS['UNAVAILABLE_HEIGHT'] ?? null ) ) { return new WP_Error( 'unavailable' ); }
+        if ( ! isset( $GLOBALS['SCAN_HEIGHTS'][$height] ) && count( $GLOBALS['SCAN_HEIGHTS'] ) >= 9 ) { return new WP_Error( 'chunk-end' ); }
+        $GLOBALS['SCAN_HEIGHTS'][$height] = true;
+        $GLOBALS['ALL_SCAN_HEIGHTS'][$height] = true;
+    }
+    $GLOBALS['BLOCK_READS'][$height] = ( $GLOBALS['BLOCK_READS'][$height] ?? 0 ) + 1;
+    if ( ( $GLOBALS['FAIL_FINAL_HEIGHT'] ?? null ) === $height && $GLOBALS['BLOCK_READS'][$height] > 1 ) { return new WP_Error( 'final-header-unavailable' ); }
+    $block = $height < ( $GLOBALS['SCAN_TIP'] ?? 100 ) ? array( 'result' => array( 'block_header' => array( 'height' => $height, 'num_txes' => 0, 'hash' => scan_block_hash( $height ), 'prev_hash' => scan_block_hash( $height - 1 ) ), 'tx_hashes' => array() ) ) : array();
+    if ( ( $GLOBALS['CHANGE_FINAL_HEIGHT'] ?? null ) === $height && $GLOBALS['BLOCK_READS'][$height] > 1 ) { $block['result']['block_header']['hash'] = str_repeat( 'f', 64 ); }
+    if ( ( $GLOBALS['MISSING_HEADER_HEIGHT'] ?? null ) === $height ) { unset( $block['result']['block_header']['hash'] ); }
+    if ( ( $GLOBALS['WRONG_PREVIOUS_HEIGHT'] ?? null ) === $height ) { $block['result']['block_header']['prev_hash'] = str_repeat( 'f', 64 ); }
     return array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $block ) );
 }
+function scan_block_hash( $height ) { return hash( 'sha256', (string) $height . ( ( $GLOBALS['REORG_HEIGHT'] ?? null ) === $height ? ':fork' : '' ) ); }
 function wp_remote_retrieve_response_code( $response ) { return $response['response']['code']; }
 function wp_remote_retrieve_body( $response ) { return $response['body']; }
 class WP_Error { public $code; public $msg; public function __construct( $c = '', $m = '' ) { $this->code = $c; $this->msg = $m; } public function get_error_message() { return $this->msg; } }
@@ -169,8 +181,8 @@ ok( 'watch expiry checks the last existing block, not the chain length', $watch-
 function absint( $value ) { return abs( (int) $value ); }
 function sanitize_text_field( $value ) { return (string) $value; }
 function wp_unslash( $value ) { return $value; }
-class JsonResponse extends RuntimeException { public $data; public function __construct( $data ) { $this->data = $data; } }
-function wp_send_json( $data, $code = 200 ) { throw new JsonResponse( $data ); }
+class JsonResponse extends RuntimeException { public $data; public $http_status; public function __construct( $data, $status = 200 ) { $this->data = $data; $this->http_status = $status; } }
+function wp_send_json( $data, $code = 200 ) { throw new JsonResponse( $data, $code ); }
 
 ok( 'watch scan saves checkout status', is_array( $watch->get_meta( '_xmrpay_watch_status' ) ) && $watch->get_meta( '_xmrpay_watch_status' )['status'] === 'pending' );
 $watch->status = 'on-hold';
@@ -225,6 +237,112 @@ $refund = new WC_Order_Refund( 603 ); $refund->parent = 600; $refund->amount = 1
 $GLOBALS['ORDERS'][603] = $refund;
 $gw->process_refund( 600, 10 ); $gw->on_refunded( 600, 603 );
 ok( 'gateway refund event does not count twice', (float) $manual->get_meta( '_xmrpay_refund_amount' ) === 50.0 );
+
+// A bounded scan smaller than the overlap must still reach the invoice's payment block.
+$progress = new FakeOrder( 700 );
+$progress->update_meta_data( '_xmrpay_mode', 'watch' );
+$progress->update_meta_data( '_xmrpay_address', 'merchant-subaddress' );
+$progress->update_meta_data( '_xmrpay_amount', '0.01' );
+$progress->update_meta_data( '_xmrpay_birthday', 1000 );
+TestGateway::$opts['view_key'] = str_repeat( 'a', 64 );
+$GLOBALS['SCAN_TIP'] = 1040;
+$GLOBALS['ALL_SCAN_HEIGHTS'] = array();
+$scan_order = new ReflectionMethod( WC_Gateway_XmrPay::class, 'scan_order' );
+if ( PHP_VERSION_ID < 80100 ) { $scan_order->setAccessible( true ); }
+$complete = false;
+for ( $poll = 0; $poll < 8 && ! $complete; $poll++ ) {
+    $GLOBALS['TRANSIENTS'] = array();
+    $GLOBALS['SCAN_HEIGHTS'] = array();
+    $complete = $scan_order->invoke( $gw, $progress );
+}
+ok( 'bounded watch chunks advance beyond the overlap', $complete && (int) $progress->get_meta( '_xmrpay_scan_height' ) === 1039 );
+ok( 'bounded watch chunks cover every invoice block', count( $GLOBALS['ALL_SCAN_HEIGHTS'] ) === 40 );
+
+// Completed scans keep the existing overlap, then resume that overlap from its own cursor.
+$GLOBALS['TRANSIENTS'] = array();
+$GLOBALS['SCAN_HEIGHTS'] = array();
+$complete = $scan_order->invoke( $gw, $progress );
+$overlap = $progress->get_meta( '_xmrpay_scan_checkpoint' );
+ok( 'completed watch scan retains overlap', ! $complete && isset( $GLOBALS['SCAN_HEIGHTS'][1029] ) );
+ok( 'overlap saves its authenticated cursor below the high-water mark', is_array( $overlap ) && $overlap['height'] < 1039 && $overlap['complete'] === false && $progress->get_meta( '_xmrpay_scan_height' ) === 1039 );
+$GLOBALS['TRANSIENTS'] = array();
+$GLOBALS['SCAN_HEIGHTS'] = array();
+$complete = $scan_order->invoke( $gw, $progress );
+ok( 'partial overlap resumes without skipping unvalidated blocks', $complete && isset( $GLOBALS['SCAN_HEIGHTS'][$overlap['height'] + 1] ) );
+
+$completed_cursor = $progress->get_meta( '_xmrpay_scan_checkpoint' );
+$GLOBALS['UNAVAILABLE_HEIGHT'] = 1029;
+$GLOBALS['TRANSIENTS'] = array();
+$GLOBALS['SCAN_HEIGHTS'] = array();
+$complete = $scan_order->invoke( $gw, $progress );
+ok( 'empty overlap attempt retains completed checkpoint context', ! $complete && $progress->get_meta( '_xmrpay_scan_checkpoint' ) === $completed_cursor );
+unset( $GLOBALS['UNAVAILABLE_HEIGHT'] );
+
+$before = $progress->meta;
+$GLOBALS['UNAVAILABLE_HEIGHT'] = 1039;
+$GLOBALS['TRANSIENTS'] = array();
+$GLOBALS['SCAN_HEIGHTS'] = array();
+$complete = $scan_order->invoke( $gw, $progress );
+ok( 'unavailable checkpoint holds progress and settlement', ! $complete && $progress->get_meta( '_xmrpay_scan_checkpoint' ) === $before['_xmrpay_scan_checkpoint'] && $progress->get_meta( '_xmrpay_scan_height' ) === 1039 );
+ok( 'unavailable checkpoint reports an unreachable scan', $progress->get_meta( '_xmrpay_watch_status' )['reachable'] === false );
+unset( $GLOBALS['UNAVAILABLE_HEIGHT'] );
+
+$GLOBALS['SCAN_TIP'] = 1039;
+$GLOBALS['TRANSIENTS'] = array();
+$GLOBALS['SCAN_HEIGHTS'] = array();
+$complete = $scan_order->invoke( $gw, $progress );
+ok( 'node behind checkpoint cannot complete a scan', ! $complete && $progress->get_meta( '_xmrpay_scan_checkpoint' ) === $before['_xmrpay_scan_checkpoint'] );
+$GLOBALS['SCAN_TIP'] = 1040;
+
+$GLOBALS['REORG_HEIGHT'] = 1039;
+$GLOBALS['TRANSIENTS'] = array();
+$GLOBALS['SCAN_HEIGHTS'] = array();
+$progress->update_meta_data( '_xmrpay_received', '0.009' );
+$complete = $scan_order->invoke( $gw, $progress );
+ok( 'changed canonical checkpoint resets to birthday without settlement', ! $complete && $progress->get_meta( '_xmrpay_scan_checkpoint' ) === '' && $progress->get_meta( '_xmrpay_scan_height' ) === 999 && $progress->get_meta( '_xmrpay_received' ) === '' );
+unset( $GLOBALS['REORG_HEIGHT'] );
+
+foreach ( array( '', array( 'height' => 1038, 'hash' => scan_block_hash( 1038 ) ), array( 'height' => 1038, 'hash' => scan_block_hash( 1038 ), 'complete' => 'false' ) ) as $untrusted ) {
+    $progress->update_meta_data( '_xmrpay_scan_height', 1038 );
+    $progress->update_meta_data( '_xmrpay_scan_checkpoint', $untrusted );
+    $GLOBALS['TRANSIENTS'] = array();
+    $GLOBALS['SCAN_HEIGHTS'] = array();
+    $complete = $scan_order->invoke( $gw, $progress );
+    ok( 'legacy or malformed cursor cannot bypass invoice history', ! $complete && isset( $GLOBALS['SCAN_HEIGHTS'][1000] ) );
+}
+
+$scanner = new XmrPay_Scanner( 'http://127.0.0.1:2', 'stagenet' );
+$scan_options = array( 'tip' => 1040, 'max_blocks' => 4, 'time_budget' => 8.0, 'restore_height' => 1000 );
+foreach ( array( 'CHANGE_FINAL_HEIGHT', 'FAIL_FINAL_HEIGHT', 'WRONG_PREVIOUS_HEIGHT', 'MISSING_HEADER_HEIGHT' ) as $fault ) {
+    $GLOBALS[$fault] = 1002;
+    $GLOBALS['SCAN_HEIGHTS'] = array();
+    $GLOBALS['BLOCK_READS'] = array();
+    $result = $scanner->scan_all( 'merchant-subaddress', str_repeat( 'a', 64 ), 1000, 1039, $scan_options );
+    if ( $fault === 'FAIL_FINAL_HEIGHT' ) {
+        ok( 'final header outage cannot publish a checkpoint', $result['checkpoint'] === null && ( $result['checkpoint_error'] ?? '' ) === 'unavailable' && $result['scanned_to'] === 999 );
+    } elseif ( $fault === 'MISSING_HEADER_HEIGHT' ) {
+        ok( 'missing canonical header cannot advance past that block', $result['scanned_to'] === 1001 && $result['checkpoint']['height'] === 1001 );
+    } else {
+        ok( 'changed or disconnected acquired branch resets scan', ! empty( $result['reorg_detected'] ) && $result['checkpoint'] === null && $result['scanned_to'] === 999 && $result['matches'] === array() );
+    }
+    unset( $GLOBALS[$fault] );
+}
+
+// Agent eligibility must not claim native completion when the database cannot acquire its lock.
+class UnavailablePaymentDatabase {
+    public $prefix = 'wp_';
+    public function prepare( $query, ...$arguments ) { return $query; }
+    public function get_var( $query ) { return '0'; }
+}
+function add_option( $key, $value = '', $deprecated = '', $autoload = true ) { return false; }
+$GLOBALS['wpdb'] = new UnavailablePaymentDatabase();
+XmrPay_Agent::$response = array( 'paid' => true, 'status' => 'paid', 'receivedXmr' => '0.01' );
+$_GET = array( 'order_id' => 506, 'key' => $agent_order->get_order_key() );
+$agent_order->status = 'on-hold';
+try { $gw->ajax_status(); } catch ( JsonResponse $response ) {
+    ok( 'unavailable native completion does not report agent eligibility as paid', $response->data['paid'] === false && $response->data['status'] === 'pending' );
+    ok( 'unavailable native completion remains retryable', $response->http_status === 503 && $response->data['reachable'] === false );
+}
 
 echo "\n" . ( $fail ? 'FAILED' : 'ALL GREEN' ) . "  $pass passed, $fail failed\n";
 exit( $fail ? 1 : 0 );

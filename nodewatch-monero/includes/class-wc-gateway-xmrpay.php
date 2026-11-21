@@ -448,9 +448,40 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$birthday   = (int) $order->get_meta( '_xmrpay_birthday' );
 		$checkpoint = (int) $order->get_meta( '_xmrpay_scan_height' );
 
-		$from       = max( $birthday, $checkpoint - max( 10, $min_conf ) );
-		$res        = $scanner->scan_all( $address, $view, $from, $tip - 1, array( 'tip' => $tip, 'max_blocks' => 30, 'time_budget' => 8.0, 'require_commitment' => true ) );
+		$cursor = $order->get_meta( '_xmrpay_scan_checkpoint' );
+		$authenticated = is_array( $cursor ) && is_int( $cursor['height'] ?? null ) && $cursor['height'] >= $birthday
+			&& is_string( $cursor['hash'] ?? null ) && preg_match( '/^[0-9a-f]{64}$/D', $cursor['hash'] )
+			&& is_bool( $cursor['complete'] ?? null );
+		// Legacy scalar heights cannot authorize skipping invoice blocks.
+		$from = $birthday;
+		$options = array( 'tip' => $tip, 'max_blocks' => 30, 'time_budget' => 8.0, 'require_commitment' => true, 'restore_height' => $birthday );
+		if ( $authenticated ) {
+			$from = $cursor['complete'] ? max( $birthday, $cursor['height'] - max( 10, $min_conf ) ) : $cursor['height'] + 1;
+			$options['checkpoint'] = array( 'height' => $cursor['height'], 'hash' => $cursor['hash'] );
+		}
+		$res = $scanner->scan_all( $address, $view, $from, $tip - 1, $options );
+		if ( ! empty( $res['reorg_detected'] ) ) {
+			foreach ( array( '_xmrpay_scan_checkpoint', '_xmrpay_watch_txids', '_xmrpay_watch_txid', '_xmrpay_received', '_xmrpay_partial_flagged', '_xmrpay_confirmations', '_xmrpay_watch_status' ) as $key ) {
+				$order->delete_meta_data( $key );
+			}
+			$order->update_meta_data( '_xmrpay_scan_height', $birthday - 1 );
+			$order->save();
+			return false;
+		}
+		if ( ! empty( $res['checkpoint_error'] ) ) {
+			$status = $order->get_meta( '_xmrpay_watch_status' );
+			if ( ! is_array( $status ) ) { $status = array( 'status' => 'pending' ); }
+			$status['reachable'] = false;
+			$order->update_meta_data( '_xmrpay_watch_status', $status );
+			$order->save();
+			return false;
+		}
 		$scanned_to = isset( $res['scanned_to'] ) ? (int) $res['scanned_to'] : $checkpoint;
+		if ( is_array( $res['checkpoint'] ?? null ) && $res['checkpoint']['height'] === $scanned_to ) {
+			$next = $res['checkpoint'];
+			$next['complete'] = $scanned_to >= $tip - 1;
+			$order->update_meta_data( '_xmrpay_scan_checkpoint', $next );
+		}
 		$matches    = ( isset( $res['matches'] ) && is_array( $res['matches'] ) ) ? $res['matches'] : array();
 		foreach ( $matches as $m ) {
 			$rows[] = $m;
@@ -471,7 +502,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 
 		if ( $sum['paid'] ) {
-			$this->mark_paid( $order, array(
+			$completed = $this->mark_paid( $order, array(
 				'paid'          => true,
 				'received_xmr'  => XmrPay_Util::pico_to_string( $sum['received_pico'] ),
 				'txids'         => $sum['txids'],
@@ -479,7 +510,20 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				'overpaid'      => '0' !== $sum['overpaid_pico'],
 				'overpaid_xmr'  => XmrPay_Util::pico_to_string( $sum['overpaid_pico'] ),
 			), true );
-			return true;
+			if ( ! $completed ) {
+				$order = wc_get_order( $id );
+				if ( $order && $order->is_paid() ) { return true; }
+				if ( $order ) {
+					// Funds cover the invoice: a deferred native completion must not ask for another payment.
+					$order->update_meta_data( '_xmrpay_watch_status', array(
+						'reachable' => true, 'status' => 'fulfillment_pending', 'shortfallXmr' => '0',
+						'receivedXmr' => XmrPay_Util::pico_to_string( $sum['received_pico'] ),
+						'confirmations' => (int) $sum['confirmations'], 'minConfirmations' => $min_conf, 'tipHeight' => $tip,
+					) );
+					$order->save();
+				}
+			}
+			return $completed;
 		}
 
 		$order->update_meta_data( '_xmrpay_watch_status', array(
@@ -1023,7 +1067,11 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				wc_add_notice( __( 'Could not compute a valid XMR amount. Check your rate settings.', 'nodewatch-monero' ), 'error' );
 				return array( 'result' => 'failure' );
 			}
-			$order->payment_complete();
+			require_once __DIR__ . '/class-xmrpay-payment-transaction.php';
+			$completed = XmrPay_Payment_Transaction::complete( $order_id, static function ( $fresh ) {
+				return $fresh->payment_complete() && $fresh->is_paid();
+			} );
+			if ( ! $completed ) { return array( 'result' => 'failure' ); }
 			$order->add_order_note( __( 'Order total is 0: no Monero payment required.', 'nodewatch-monero' ) );
 			if ( WC()->cart ) { WC()->cart->empty_cart(); }
 			return array( 'result' => 'success', 'redirect' => $this->get_return_url( $order ) );
@@ -1151,6 +1199,12 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$overpaid_xmr = (string) $order->get_meta( '_xmrpay_overpaid_xmr' );
 
 		$terminal = ! $paid && in_array( $order->get_status(), array( 'cancelled', 'failed' ), true );
+		$watch_status = $order->get_meta( '_xmrpay_watch_status' );
+		$fulfillment_pending = ! $paid && is_array( $watch_status ) && ( $watch_status['status'] ?? '' ) === 'fulfillment_pending';
+		$status_text = $paid ? __( '✓ Payment received', 'nodewatch-monero' ) : __( '● Awaiting payment…', 'nodewatch-monero' );
+		if ( $fulfillment_pending ) {
+			$status_text = __( 'Payment received. Finalizing your order. Do not send another payment.', 'nodewatch-monero' );
+		}
 
 		wp_enqueue_script( 'xmrpay-widget' );
 		wp_enqueue_script( 'xmrpay-checkout' );
@@ -1162,9 +1216,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 					<?php /* translators: %s: order number */ echo esc_html( sprintf( __( 'This order (#%s) has expired. If you already sent a Monero payment, contact us with your order number so we can reconcile it.', 'nodewatch-monero' ), $order_id ) ); ?>
 				</div>
 			<?php else : ?>
-			<div id="xmrpay-status"<?php echo $proof ? '' : ' data-poll="' . esc_url( $status_url ) . '"'; ?> data-paid="<?php echo $paid ? '1' : '0'; ?>"<?php echo $redirect !== '' ? ' data-redirect="' . esc_url( $redirect ) . '"' : ''; ?>
+			<div id="xmrpay-status"<?php echo $proof ? '' : ' data-poll="' . esc_url( $status_url ) . '"'; ?> data-paid="<?php echo $paid ? '1' : '0'; ?>" data-fulfillment-pending="<?php echo $fulfillment_pending ? '1' : '0'; ?>"<?php echo $redirect !== '' ? ' data-redirect="' . esc_url( $redirect ) . '"' : ''; ?>
 				 style="font-weight:600;margin:8px 0;<?php echo $paid ? 'color:#15803d' : 'color:#b45309'; ?>">
-				<?php echo $paid ? esc_html__( '✓ Payment received', 'nodewatch-monero' ) : esc_html__( '● Awaiting payment…', 'nodewatch-monero' ); ?>
+				<?php echo esc_html( $status_text ); ?>
 			</div>
 			<?php if ( $overpaid ) : ?>
 				<div class="xmrpay-overpaid" style="margin:10px 0;padding:11px 13px;border:1px solid #f59e0b;border-radius:6px;color:#92400e;background:#fffbeb;font-size:13px;line-height:1.5">
@@ -1172,7 +1226,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 				</div>
 			<?php endif; ?>
 			<?php if ( ! $paid ) : ?>
-				<xmr-pay address="<?php echo esc_attr( $addr ); ?>" amount="<?php echo esc_attr( $amount ); ?>"
+				<xmr-pay<?php echo $fulfillment_pending ? ' hidden style="display:none"' : ''; ?> address="<?php echo esc_attr( $addr ); ?>" amount="<?php echo esc_attr( $amount ); ?>"
 						 label="<?php echo esc_attr( get_bloginfo( 'name' ) . ' #' . $order_id ); ?>"
 						 theme="<?php echo esc_attr( $this->get_option( 'checkout_theme', 'light' ) ); ?>"
 						 lang="<?php echo esc_attr( substr( get_locale(), 0, 2 ) === 'es' ? 'es' : 'en' ); ?>"></xmr-pay>
@@ -1242,6 +1296,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			wp_send_json( array( 'error' => 'not found' ), 404 );
 		}
 		if ( $order->is_paid() ) {
+			if ( ! $this->paid_fulfillment_ready( $order ) ) {
+				wp_send_json( array( 'error' => 'fulfillment unavailable', 'reachable' => false ), 503 );
+			}
 			wp_send_json( array( 'paid' => true, 'status' => 'paid' ) );
 		}
 
@@ -1270,7 +1327,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		}
 
 		if ( filter_var( $r['paid'] ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
-			$this->mark_paid( $order, $r );
+			if ( ! $this->mark_paid( $order, $r ) ) {
+				wp_send_json( array( 'paid' => false, 'status' => 'pending', 'reachable' => false ), 503 );
+			}
 		}
 		$num = function ( $k ) use ( $r ) { return isset( $r[ $k ] ) && is_numeric( $r[ $k ] ) ? 0 + $r[ $k ] : null; };
 		$agent_paid = filter_var( $r['paid'] ?? false, FILTER_VALIDATE_BOOLEAN );
@@ -1304,6 +1363,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			wp_send_json( array( 'paid' => false, 'message' => __( 'Order not found.', 'nodewatch-monero' ) ), 404 );
 		}
 		if ( $order->is_paid() ) {
+			if ( ! $this->paid_fulfillment_ready( $order ) ) {
+				wp_send_json( array( 'error' => 'fulfillment unavailable', 'reachable' => false ), 503 );
+			}
 			wp_send_json( array( 'paid' => true, 'status' => 'paid' ) );
 		}
 
@@ -1380,7 +1442,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 
 		$order->update_meta_data( '_xmrpay_proof_txid', $txid );
 		$order->save();
-		$this->mark_paid( $order, array(
+		$completed = $this->mark_paid( $order, array(
 			'paid'          => true,
 			'received_xmr'  => XmrPay_Util::pico_to_string( $res['amount_atomic'] ),
 			'txids'         => array( $txid ),
@@ -1388,6 +1450,9 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			'overpaid'      => '0' !== $verdict['overpaid_pico'],
 			'overpaid_xmr'  => XmrPay_Util::pico_to_string( $verdict['overpaid_pico'] ),
 		), true );
+		if ( ! $completed ) {
+			wp_send_json( array( 'paid' => false, 'status' => 'pending', 'reachable' => false ), 503 );
+		}
 		wp_send_json( array( 'paid' => true, 'status' => 'paid' ) );
 	}
 
@@ -1442,32 +1507,48 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 	}
 
 	private function mark_paid( $order, $data, $chain_verified = false ) {
+		if ( ! $order || $order->get_payment_method() !== $this->id
+			|| ( ! $chain_verified && ! in_array( (string) $order->get_meta( '_xmrpay_mode' ), array( '', 'agent' ), true ) ) ) {
+			return false;
+		}
+		require_once __DIR__ . '/class-xmrpay-payment-transaction.php';
+		return XmrPay_Payment_Transaction::complete( $order->get_id(), function ( $fresh ) use ( $data, $chain_verified ) {
+			return $this->complete_payment( $fresh, $data, $chain_verified );
+		} );
+	}
+
+	private function paid_fulfillment_ready( $order ) {
+		require_once __DIR__ . '/class-xmrpay-payment-transaction.php';
+		return XmrPay_Payment_Transaction::repair( $order );
+	}
+
+	private function complete_payment( $order, $data, $chain_verified = false ) {
 
 		if ( $order->get_payment_method() !== $this->id ) {
-			return;
+			return false;
 		}
 		if ( $order->is_paid() ) {
-			return;
+			return true;
 		}
 		if ( ! $chain_verified && ! in_array( (string) $order->get_meta( '_xmrpay_mode' ), array( '', 'agent' ), true ) ) {
-			return;
+			return false;
 		}
 
 		$lock_key = 'pay_' . $order->get_id();
 		if ( ! $this->acquire_lock( $lock_key, 30 ) ) {
-			return;
+			return false;
 		}
 
 		$order = wc_get_order( $order->get_id() );
 		if ( ! $order || $order->is_paid() ) {
 			$this->release_lock( $lock_key );
-			return;
+			return false;
 		}
 
 		$mode = (string) $order->get_meta( '_xmrpay_mode' );
 		if ( ! $chain_verified && ! in_array( $mode, array( '', 'agent' ), true ) ) {
 			$this->release_lock( $lock_key );
-			return;
+			return false;
 		}
 
 		if ( in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed' ), true ) ) {
@@ -1478,7 +1559,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 			) );
 			$this->log( 'late payment for ' . $order->get_status() . ' order #' . $order->get_id() . ': not auto-completed', 'warning' );
 			$this->release_lock( $lock_key );
-			return;
+			return false;
 		}
 
 		$received_raw = isset( $data['received_xmr'] ) ? $data['received_xmr'] : ( $data['receivedXmr'] ?? null );
@@ -1519,7 +1600,7 @@ class WC_Gateway_XmrPay extends WC_Payment_Gateway {
 		$this->log( 'marked paid #' . $order->get_id() . ' · received ' . $received . ' · tx ' . $txids );
 
 		try {
-			$order->payment_complete( $first_txid );
+			return $order->payment_complete( $first_txid ) && $order->is_paid();
 		} finally {
 			$this->release_lock( $lock_key );
 		}

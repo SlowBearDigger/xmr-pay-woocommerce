@@ -4,6 +4,7 @@
 	if (!host) return;
 	var url = host.getAttribute('data-poll');
 	var already = host.getAttribute('data-paid') === '1';
+	var finalizing = host.getAttribute('data-fulfillment-pending') === '1';
 	var rawRedirect = host.getAttribute('data-redirect') || '';
 
 	var redirect = (/^https?:\/\//i.test(rawRedirect) || /^\/[^/]/.test(rawRedirect)) ? rawRedirect : '';
@@ -59,11 +60,17 @@
 
 	function stepFor(d) {
 		if (d.paid || d.status === 'paid') return 3;
-		if (d.status === 'unconfirmed' || d.status === 'partial' || d.status === 'locked') return 2;
+		if (d.status === 'unconfirmed' || d.status === 'partial' || d.status === 'locked' || d.status === 'fulfillment_pending') return 2;
 		if (d.status === 'mempool') return 1;
 		return 0;
 	}
 	function paint(d) {
+		var deferred = d.status === 'fulfillment_pending';
+		var payment = document.querySelector('.xmrpay-panel xmr-pay') || document.querySelector('xmr-pay');
+		if (payment) {
+			payment.hidden = Boolean(deferred || d.paid);
+			payment.style.display = payment.hidden ? 'none' : '';
+		}
 		var active = stepFor(d);
 		var bars = steps.querySelectorAll('.bar');
 		for (var i = 0; i < dots.length; i++) {
@@ -74,7 +81,8 @@
 		if (d.paid) { text = '✓ ' + (L.paid || 'Payment confirmed'); msg.style.color = '#15803d'; }
 		else {
 			msg.style.color = '#b45309';
-			if (d.reachable === false) text = L.mConnecting || 'Connecting to the payment scanner…';
+			if (deferred) text = L.mFinalizing || 'Payment received. Finalizing your order. Do not send another payment.';
+			else if (d.reachable === false) text = L.mConnecting || 'Connecting to the payment scanner…';
 			else if (d.status === 'mempool') text = L.mMempool || 'Payment detected: waiting for the first confirmation.';
 			else if (d.status === 'unconfirmed') text = (L.mConfirming || 'Confirming: {c}/{m} confirmations.').replace('{c}', d.confirmations != null ? d.confirmations : 0).replace('{m}', d.minConfirmations != null ? d.minConfirmations : 1);
 			else if (d.status === 'partial') { text = (L.mPartial || 'Received {r} XMR: send {s} more (QR updated).').replace('{r}', d.receivedXmr != null ? d.receivedXmr : '?').replace('{s}', d.shortfallXmr || '?'); applyTopup(d.shortfallXmr); }
@@ -87,7 +95,7 @@
 	}
 
 	if (already) { paint({ paid: true }); return; }
-	paint({ status: 'pending' });
+	paint({ status: finalizing ? 'fulfillment_pending' : 'pending' });
 
 	var stopped = false, timer = null, started = Date.now();
 	var MAX_MS = 6 * 60 * 60 * 1000;

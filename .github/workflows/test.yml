@@ -26,7 +26,7 @@ jobs:
         working-directory: nodewatch-monero
         run: |
           fail=0
-          for t in state util aggregation crypto refund report gateway stress concurrency invariant-stress; do
+          for t in state util aggregation crypto refund report gateway payment-downloads stress concurrency invariant-stress; do
             if [ -f "tests/$t.test.php" ]; then
               echo "── $t ──"
               php "tests/$t.test.php" || fail=1
